@@ -1,0 +1,6 @@
+node_modules/
+quiniela.db
+quiniela.db-wal
+quiniela.db-shm
+*.log
+.DS_Store

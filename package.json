@@ -1,0 +1,11 @@
+{
+  "name": "quiniela-familiar-mundial-2026",
+  "version": "1.0.0",
+  "description": "Quiniela familiar del Mundial 2026: pronostica Local / Empate / Visitante. 1 punto por acierto, tabla en vivo. Sin dependencias externas (Node + SQLite integrado).",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node run.js",
+    "start:directo": "node --no-warnings server.js"
+  }
+}

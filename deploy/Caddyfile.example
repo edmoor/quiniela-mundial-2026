@@ -1,0 +1,4 @@
+# Caddy da HTTPS automático. Copia a /etc/caddy/Caddyfile y pon tu dominio.
+quiniela.TUDOMINIO.com {
+    reverse_proxy localhost:3000
+}

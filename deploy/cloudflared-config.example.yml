@@ -1,0 +1,11 @@
+# Copia esto a /etc/cloudflared/config.yml y ajusta:
+#  - "tunnel" y "credentials-file": los que te dio `cloudflared tunnel create quiniela`
+#  - "hostname": tu subdominio real
+tunnel: quiniela
+credentials-file: /root/.cloudflared/REEMPLAZA-CON-EL-ID.json
+
+ingress:
+  - hostname: quiniela.TUDOMINIO.com
+    service: http://localhost:3000
+  # Todo lo demás devuelve 404:
+  - service: http_status:404

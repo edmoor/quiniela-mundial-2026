@@ -1,0 +1,19 @@
+[Unit]
+Description=Quiniela Familiar Mundial 2026
+After=network.target
+
+[Service]
+Type=simple
+# Ajusta esta ruta a donde clonaste el repo:
+WorkingDirectory=/opt/quiniela-mundial-2026
+Environment=PORT=3000
+# Cambia el PIN de administrador:
+Environment=ADMIN_PIN=2026
+ExecStart=/usr/bin/node run.js
+Restart=always
+RestartSec=3
+# Opcional: corre con un usuario sin privilegios en vez de root
+User=root
+
+[Install]
+WantedBy=multi-user.target
