@@ -603,19 +603,34 @@ function openSettings() {
     catch (err) { toast(err.message, 'err'); }
   });
 }
-function openPlayers() {
-  let html = STATE.standings.length ? '' : '<p class="empty">Aún no hay jugadores.</p>';
-  for (const p of STATE.standings) {
-    html += `<div class="admin-match" style="display:flex;align-items:center;gap:11px">
-      <div class="av" style="width:38px;height:38px;border-radius:12px;display:grid;place-items:center;font-size:20px;background:rgba(255,255,255,.05);border:1px solid var(--line)">${esc(p.emoji)}</div>
-      <div style="flex:1;min-width:0"><b>${esc(p.name)}</b><div class="hint">${p.puntos} pts · ${p.total} pronósticos</div></div>
-      <button class="btn danger small" data-delplayer="${p.id}" style="flex:0 0 auto">🗑️</button></div>`;
+async function openPlayers() {
+  let players;
+  try { players = (await api('/api/admin/players', { admin: true })).players || []; }
+  catch (err) { toast(err.message, 'err'); return; }
+  const ptsById = {};
+  for (const s of STATE.standings) ptsById[s.id] = s;
+  let html = players.length ? '' : '<p class="empty">Aún no hay jugadores.</p>';
+  for (const p of players) {
+    const st = ptsById[p.id] || { puntos: 0, total: 0 };
+    html += `<div class="admin-match">
+      <div style="display:flex;align-items:center;gap:11px">
+        <div class="av" style="width:38px;height:38px;border-radius:12px;display:grid;place-items:center;font-size:20px;background:rgba(255,255,255,.05);border:1px solid var(--line)">${esc(p.emoji)}</div>
+        <div style="flex:1;min-width:0"><b>${esc(p.name)}</b><div class="hint">${st.puntos} pts · ${st.total} pronósticos</div></div>
+        <button class="btn danger small" data-delplayer="${p.id}" style="flex:0 0 auto">🗑️</button>
+      </div>
+      <div style="margin-top:9px;display:flex;gap:7px;align-items:center">
+        <code style="flex:1;min-width:0;font-size:11px;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:9px;padding:8px 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Space Grotesk',monospace;color:var(--muted)">${esc(p.token)}</code>
+        <button class="btn secondary small" data-copycode="${esc(p.token)}" style="flex:0 0 auto">📋 Copiar</button>
+      </div>
+    </div>`;
   }
-  const modal = openModal('Jugadores', 'Elimina un jugador si fue creado por error.', html + `<button class="btn secondary" data-back-admin style="margin-top:12px">Volver</button>`);
+  const modal = openModal('Jugadores y sus códigos', 'Pásale su código a quien lo olvidó: con él entra a su mismo jugador desde otro celular (en “Yo → Ya tengo un código”).', html + `<button class="btn secondary" data-back-admin style="margin-top:12px">Volver</button>`);
   modal.querySelector('[data-back-admin]').addEventListener('click', () => adminPanel());
   modal.addEventListener('click', async (e) => {
+    const cp = e.target.closest('[data-copycode]');
+    if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copycode); toast('Código copiado 📋', 'ok'); } catch { toast('Mantén presionado el código para copiar.', ''); } return; }
     const b = e.target.closest('[data-delplayer]'); if (!b) return;
-    const id = Number(b.dataset.delplayer); const p = STATE.standings.find((x) => x.id === id);
+    const id = Number(b.dataset.delplayer); const p = players.find((x) => x.id === id);
     const ok = await confirmModal('Eliminar jugador', `¿Eliminar a <b>${esc(p ? p.name : '')}</b> y sus pronósticos?`, 'Eliminar', 'Cancelar');
     if (!ok) return;
     try { await api(`/api/admin/players/${id}`, { method: 'DELETE', admin: true }); toast('Jugador eliminado', 'ok'); await loadState(); openPlayers(); }

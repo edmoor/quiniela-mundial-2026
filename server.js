@@ -99,6 +99,7 @@ const Q = {
   allMatches: db.prepare('SELECT * FROM matches'),
   matchById: db.prepare('SELECT * FROM matches WHERE id = ?'),
   allPlayers: db.prepare('SELECT id, name, emoji, created_at FROM players'),
+  allPlayersAdmin: db.prepare('SELECT id, name, emoji, token FROM players ORDER BY name COLLATE NOCASE'),
   playerByToken: db.prepare('SELECT id, name, emoji FROM players WHERE token = ?'),
   playerByNameKey: db.prepare('SELECT id FROM players WHERE name_key = ?'),
   allPredictions: db.prepare('SELECT player_id, match_id, pick, home_goals, away_goals FROM predictions'),
@@ -323,6 +324,12 @@ async function handleApi(req, res, pathname) {
 
     if (pathname === '/api/admin/verify' && method === 'POST') {
       return sendJSON(res, 200, { ok: true });
+    }
+
+    // Lista de jugadores CON su código (token), para que el admin pueda
+    // ayudar a alguien que lo olvidó. Solo accesible con el PIN.
+    if (pathname === '/api/admin/players' && method === 'GET') {
+      return sendJSON(res, 200, { players: Q.allPlayersAdmin.all() });
     }
 
     // Crear partido
