@@ -192,11 +192,7 @@ function matchCard(m) {
     const tot = Math.max(1, m.total_picks);
     extra += `<div class="distrib"><i class="h" style="width:${m.counts.home / tot * 100}%"></i><i class="d" style="width:${m.counts.draw / tot * 100}%"></i><i class="a" style="width:${m.counts.away / tot * 100}%"></i></div>`;
     if (m.picks && m.picks.length) {
-      const items = m.picks.map((p) => {
-        const mark = p.exact ? '⭐' : p.correct === true ? '✓' : p.correct === false ? '✗' : '';
-        return `<li class="${p.exact ? 'exact' : ''}"><span>${esc(p.emoji)}</span><span class="who">${esc(p.name)}</span><span class="sc num">${p.home_goals}–${p.away_goals} ${mark}</span></li>`;
-      }).join('');
-      extra += `<details class="reveal"><summary>Ver pronósticos (${m.picks.length})</summary><ul>${items}</ul></details>`;
+      extra += `<button class="btn secondary small" data-reveal="${m.id}" style="width:100%;margin-top:11px">👁️ Ver qué puso cada quien · ${m.picks.length}</button>`;
     }
   }
   return `<div class="match" data-mid="${m.id}">${head}${body}<div class="m-foot">${foot}</div>${extra}</div>`;
@@ -257,6 +253,29 @@ async function submitDraft(mid) {
     toast('¡Pronóstico guardado! 🔒', 'ok');
     await loadState();
   } catch (err) { toast(err.message, 'err'); await loadState(); }
+}
+
+// Modal con lo que pronosticó cada persona en un partido (ya cerrado).
+function showPicks(mid) {
+  const m = STATE.matches.find((x) => x.id === mid);
+  if (!m || !m.picks) return;
+  const graded = !!m.result && m.home_score != null;
+  const head = `<div class="center" style="margin-bottom:14px">
+    <div style="font-size:15px;font-weight:700">${esc(m.home_emoji)} ${esc(m.home)} vs ${esc(m.away)} ${esc(m.away_emoji)}</div>
+    ${graded
+      ? `<div class="num" style="font-size:30px;font-weight:700;margin-top:6px">${m.home_score} <span style="color:var(--faint)">–</span> ${m.away_score}</div><div class="hint">Resultado final</div>`
+      : `<div class="hint" style="margin-top:6px">Aún sin resultado</div>`}</div>`;
+  let list;
+  if (!m.picks.length) list = '<p class="empty">Nadie pronosticó este partido.</p>';
+  else list = m.picks.map((p) => {
+    const mark = p.exact ? '<span class="pill exact">⭐ Exacto</span>' : p.correct === true ? '<span class="pill ok">✓</span>' : p.correct === false ? '<span class="pill no">✗</span>' : '';
+    const sideTxt = p.pick === 'home' ? m.home : p.pick === 'away' ? m.away : 'Empate';
+    return `<div class="admin-match" style="display:flex;align-items:center;gap:11px;margin-bottom:8px">
+      <div class="av" style="width:36px;height:36px;border-radius:11px;display:grid;place-items:center;font-size:19px;background:rgba(255,255,255,.05);border:1px solid var(--line)">${esc(p.emoji)}</div>
+      <div style="flex:1;min-width:0"><b>${esc(p.name)}</b><div class="hint">${esc(sideTxt)}</div></div>
+      <span class="num" style="font-weight:700;font-size:16px">${p.home_goals}–${p.away_goals}</span>${mark}</div>`;
+  }).join('');
+  openModal('Pronósticos del partido', '', head + list + `<button class="btn secondary" data-close style="margin-top:8px">Cerrar</button>`);
 }
 
 /* ---------- TABLA ---------- */
@@ -348,6 +367,8 @@ VIEW.addEventListener('click', (e) => {
   if (chip && chip.dataset.mid) { onChip(Number(chip.dataset.mid), chip.dataset.pick); return; }
   const cf = e.target.closest('[data-confirm]');
   if (cf) { submitDraft(Number(cf.dataset.confirm)); return; }
+  const rev = e.target.closest('[data-reveal]');
+  if (rev) { showPicks(Number(rev.dataset.reveal)); return; }
   const act = e.target.closest('[data-act]');
   if (act) { const a = act.dataset.act; if (a === 'register') openRegister(); else if (a === 'restore') openRestore(); else if (a === 'showcode') showCode(); }
 });
