@@ -12,6 +12,10 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PIN="${ADMIN_PIN:-2026}"
 PORT="${PORT:-3000}"
 
+# Usar $SUDO solo si no somos root (en Hetzner es común entrar como root).
+SUDO=""
+[ "$(id -u)" -ne 0 ] && SUDO="sudo"
+
 echo "▸ Carpeta de la app: $DIR"
 echo "▸ Puerto: $PORT  ·  PIN admin: $PIN"
 
@@ -23,14 +27,14 @@ if command -v node >/dev/null 2>&1; then
 fi
 if [ "$need_node" -eq 1 ]; then
   echo "▸ Instalando Node 22…"
-  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-  sudo apt-get install -y nodejs
+  curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO -E bash -
+  $SUDO apt-get install -y nodejs
 fi
 echo "▸ Node: $(node -v)"
 
 # 2) Servicio systemd
 echo "▸ Creando servicio systemd 'quiniela'…"
-sudo tee /etc/systemd/system/quiniela.service >/dev/null <<UNIT
+$SUDO tee /etc/systemd/system/quiniela.service >/dev/null <<UNIT
 [Unit]
 Description=Quiniela Familiar Mundial 2026
 After=network.target
@@ -49,10 +53,10 @@ User=root
 WantedBy=multi-user.target
 UNIT
 
-sudo systemctl daemon-reload
-sudo systemctl enable --now quiniela
+$SUDO systemctl daemon-reload
+$SUDO systemctl enable --now quiniela
 sleep 2
-sudo systemctl --no-pager status quiniela | head -6 || true
+$SUDO systemctl --no-pager status quiniela | head -6 || true
 
 echo
 echo "✅ Quiniela corriendo en http://localhost:$PORT  (PIN admin: $PIN)"
