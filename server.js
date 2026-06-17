@@ -26,6 +26,15 @@ const { db, getMeta, setMeta } = require('./db');
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
+// Versión de los archivos estáticos (cambia en cada despliegue) para romper la
+// caché de Cloudflare/navegador. Se inyecta en index.html como ?v=__V__.
+const ASSET_VERSION = (() => {
+  try {
+    const t = ['app.js', 'styles.css', 'index.html'].map((f) => fs.statSync(path.join(PUBLIC_DIR, f)).mtimeMs);
+    return Math.floor(Math.max(...t)).toString(36);
+  } catch (_) { return Date.now().toString(36); }
+})();
+
 const PICKS = new Set(['home', 'draw', 'away']);
 
 // --- Utilidades HTTP -------------------------------------------------------
@@ -83,15 +92,26 @@ function serveStatic(req, res, pathname) {
       // Para una SPA, cualquier ruta desconocida devuelve el index.
       fs.readFile(path.join(PUBLIC_DIR, 'index.html'), (e2, idx) => {
         if (e2) { res.writeHead(404); res.end('No encontrado'); return; }
-        res.writeHead(200, { 'Content-Type': MIME['.html'] });
-        res.end(idx);
+        sendHtml(res, idx);
       });
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    if (ext === '.html') { sendHtml(res, buf); return; }
+    res.writeHead(200, {
+      'Content-Type': MIME[ext] || 'application/octet-stream',
+      'Cache-Control': 'public, max-age=600',
+    });
     res.end(buf);
   });
+}
+
+// El HTML nunca se cachea (así siempre apunta a la última versión de los
+// archivos), y se le inyecta la versión actual en ?v=__V__.
+function sendHtml(res, buf) {
+  const html = buf.toString('utf8').replace(/__V__/g, ASSET_VERSION);
+  res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' });
+  res.end(html);
 }
 
 // --- Acceso a datos --------------------------------------------------------

@@ -89,70 +89,73 @@ if (getMeta('title') === null) setMeta('title', 'Quiniela Familiar · Mundial 20
 // --- Partidos a precargar (calendario real, fuente: Wikipedia por grupo) ---
 // home_emoji / away_emoji son banderas; si un teléfono no las dibuja, el
 // nombre del equipo siempre se muestra como texto.
+// Horarios en ET (hora del Este de EE.UU., -04:00). La familia los verá en
+// hora de México (ET − 2 h). Fuentes cruzadas: NBC Sports y Yahoo Sports;
+// verificado contra horarios oficiales mexicanos (México vs Corea = 19:00 MX).
 const SEED_MATCHES = [
   // 17 jun — Grupos K y L
   ['Portugal', 'RD Congo', '🇵🇹', '🇨🇩', 'K', '2026-06-17T13:00:00-04:00', 'Houston'],
-  ['Ghana', 'Panamá', '🇬🇭', '🇵🇦', 'L', '2026-06-17T16:00:00-04:00', 'Toronto'],
-  ['Uzbekistán', 'Colombia', '🇺🇿', '🇨🇴', 'K', '2026-06-17T16:00:00-04:00', 'Ciudad de México'],
-  ['Inglaterra', 'Croacia', '🏴', '🇭🇷', 'L', '2026-06-17T19:00:00-04:00', 'Arlington'],
+  ['Inglaterra', 'Croacia', '🏴', '🇭🇷', 'L', '2026-06-17T16:00:00-04:00', 'Arlington'],
+  ['Ghana', 'Panamá', '🇬🇭', '🇵🇦', 'L', '2026-06-17T19:00:00-04:00', 'Toronto'],
+  ['Uzbekistán', 'Colombia', '🇺🇿', '🇨🇴', 'K', '2026-06-17T22:00:00-04:00', 'Ciudad de México'],
   // 18 jun — Grupos A y B
   ['Chequia', 'Sudáfrica', '🇨🇿', '🇿🇦', 'A', '2026-06-18T12:00:00-04:00', 'Atlanta'],
   ['Suiza', 'Bosnia y Herzegovina', '🇨🇭', '🇧🇦', 'B', '2026-06-18T15:00:00-04:00', 'Los Ángeles'],
   ['Canadá', 'Catar', '🇨🇦', '🇶🇦', 'B', '2026-06-18T18:00:00-04:00', 'Vancouver'],
   ['México', 'Corea del Sur', '🇲🇽', '🇰🇷', 'A', '2026-06-18T21:00:00-04:00', 'Guadalajara'],
   // 19 jun — Grupos C y D
-  ['Escocia', 'Marruecos', '🏴', '🇲🇦', 'C', '2026-06-19T12:00:00-04:00', 'Boston'],
-  ['Brasil', 'Haití', '🇧🇷', '🇭🇹', 'C', '2026-06-19T15:00:00-04:00', 'Filadelfia'],
-  ['Estados Unidos', 'Australia', '🇺🇸', '🇦🇺', 'D', '2026-06-19T18:00:00-04:00', 'Seattle'],
-  ['Turquía', 'Paraguay', '🇹🇷', '🇵🇾', 'D', '2026-06-19T21:00:00-04:00', 'San Francisco'],
+  ['Estados Unidos', 'Australia', '🇺🇸', '🇦🇺', 'D', '2026-06-19T15:00:00-04:00', 'Seattle'],
+  ['Escocia', 'Marruecos', '🏴', '🇲🇦', 'C', '2026-06-19T18:00:00-04:00', 'Boston'],
+  ['Brasil', 'Haití', '🇧🇷', '🇭🇹', 'C', '2026-06-19T20:30:00-04:00', 'Filadelfia'],
+  ['Turquía', 'Paraguay', '🇹🇷', '🇵🇾', 'D', '2026-06-20T00:00:00-04:00', 'San Francisco'],
   // 20 jun — Grupos E y F
-  ['Alemania', 'Costa de Marfil', '🇩🇪', '🇨🇮', 'E', '2026-06-20T12:00:00-04:00', 'Toronto'],
-  ['Ecuador', 'Curazao', '🇪🇨', '🇨🇼', 'E', '2026-06-20T15:00:00-04:00', 'Kansas City'],
-  ['Países Bajos', 'Suecia', '🇳🇱', '🇸🇪', 'F', '2026-06-20T18:00:00-04:00', 'Houston'],
-  ['Túnez', 'Japón', '🇹🇳', '🇯🇵', 'F', '2026-06-20T21:00:00-04:00', 'Monterrey'],
+  ['Países Bajos', 'Suecia', '🇳🇱', '🇸🇪', 'F', '2026-06-20T13:00:00-04:00', 'Houston'],
+  ['Alemania', 'Costa de Marfil', '🇩🇪', '🇨🇮', 'E', '2026-06-20T16:00:00-04:00', 'Toronto'],
+  ['Ecuador', 'Curazao', '🇪🇨', '🇨🇼', 'E', '2026-06-20T20:00:00-04:00', 'Kansas City'],
+  ['Túnez', 'Japón', '🇹🇳', '🇯🇵', 'F', '2026-06-21T00:00:00-04:00', 'Monterrey'],
   // 21 jun — Grupos G y H
-  ['Bélgica', 'Irán', '🇧🇪', '🇮🇷', 'G', '2026-06-21T12:00:00-04:00', 'Los Ángeles'],
-  ['Nueva Zelanda', 'Egipto', '🇳🇿', '🇪🇬', 'G', '2026-06-21T15:00:00-04:00', 'Vancouver'],
-  ['España', 'Arabia Saudita', '🇪🇸', '🇸🇦', 'H', '2026-06-21T18:00:00-04:00', 'Atlanta'],
-  ['Uruguay', 'Cabo Verde', '🇺🇾', '🇨🇻', 'H', '2026-06-21T21:00:00-04:00', 'Miami'],
+  ['España', 'Arabia Saudita', '🇪🇸', '🇸🇦', 'H', '2026-06-21T12:00:00-04:00', 'Atlanta'],
+  ['Bélgica', 'Irán', '🇧🇪', '🇮🇷', 'G', '2026-06-21T15:00:00-04:00', 'Los Ángeles'],
+  ['Uruguay', 'Cabo Verde', '🇺🇾', '🇨🇻', 'H', '2026-06-21T18:00:00-04:00', 'Miami'],
+  ['Nueva Zelanda', 'Egipto', '🇳🇿', '🇪🇬', 'G', '2026-06-21T21:00:00-04:00', 'Vancouver'],
   // 22 jun — Grupos I y J
-  ['Francia', 'Irak', '🇫🇷', '🇮🇶', 'I', '2026-06-22T12:00:00-04:00', 'Filadelfia'],
-  ['Noruega', 'Senegal', '🇳🇴', '🇸🇳', 'I', '2026-06-22T15:00:00-04:00', 'Nueva York'],
-  ['Argentina', 'Austria', '🇦🇷', '🇦🇹', 'J', '2026-06-22T18:00:00-04:00', 'Dallas'],
-  ['Jordania', 'Argelia', '🇯🇴', '🇩🇿', 'J', '2026-06-22T21:00:00-04:00', 'San Francisco'],
+  ['Argentina', 'Austria', '🇦🇷', '🇦🇹', 'J', '2026-06-22T13:00:00-04:00', 'Dallas'],
+  ['Francia', 'Irak', '🇫🇷', '🇮🇶', 'I', '2026-06-22T17:00:00-04:00', 'Filadelfia'],
+  ['Noruega', 'Senegal', '🇳🇴', '🇸🇳', 'I', '2026-06-22T20:00:00-04:00', 'Nueva York'],
+  ['Jordania', 'Argelia', '🇯🇴', '🇩🇿', 'J', '2026-06-22T23:00:00-04:00', 'San Francisco'],
   // 23 jun — Grupos K y L
   ['Portugal', 'Uzbekistán', '🇵🇹', '🇺🇿', 'K', '2026-06-23T13:00:00-04:00', 'Houston'],
-  ['Colombia', 'RD Congo', '🇨🇴', '🇨🇩', 'K', '2026-06-23T16:00:00-04:00', 'Guadalajara'],
   ['Inglaterra', 'Ghana', '🏴', '🇬🇭', 'L', '2026-06-23T16:00:00-04:00', 'Boston'],
   ['Panamá', 'Croacia', '🇵🇦', '🇭🇷', 'L', '2026-06-23T19:00:00-04:00', 'Toronto'],
+  ['Colombia', 'RD Congo', '🇨🇴', '🇨🇩', 'K', '2026-06-23T22:00:00-04:00', 'Guadalajara'],
   // 24 jun — Grupos A, B y C
-  ['Chequia', 'México', '🇨🇿', '🇲🇽', 'A', '2026-06-24T15:00:00-04:00', 'Ciudad de México'],
-  ['Sudáfrica', 'Corea del Sur', '🇿🇦', '🇰🇷', 'A', '2026-06-24T15:00:00-04:00', 'Monterrey'],
-  ['Suiza', 'Canadá', '🇨🇭', '🇨🇦', 'B', '2026-06-24T18:00:00-04:00', 'Vancouver'],
-  ['Bosnia y Herzegovina', 'Catar', '🇧🇦', '🇶🇦', 'B', '2026-06-24T18:00:00-04:00', 'Seattle'],
-  ['Escocia', 'Brasil', '🏴', '🇧🇷', 'C', '2026-06-24T21:00:00-04:00', 'Miami'],
-  ['Marruecos', 'Haití', '🇲🇦', '🇭🇹', 'C', '2026-06-24T21:00:00-04:00', 'Atlanta'],
+  ['Suiza', 'Canadá', '🇨🇭', '🇨🇦', 'B', '2026-06-24T15:00:00-04:00', 'Vancouver'],
+  ['Bosnia y Herzegovina', 'Catar', '🇧🇦', '🇶🇦', 'B', '2026-06-24T15:00:00-04:00', 'Seattle'],
+  ['Escocia', 'Brasil', '🏴', '🇧🇷', 'C', '2026-06-24T18:00:00-04:00', 'Miami'],
+  ['Marruecos', 'Haití', '🇲🇦', '🇭🇹', 'C', '2026-06-24T18:00:00-04:00', 'Atlanta'],
+  ['Chequia', 'México', '🇨🇿', '🇲🇽', 'A', '2026-06-24T21:00:00-04:00', 'Ciudad de México'],
+  ['Sudáfrica', 'Corea del Sur', '🇿🇦', '🇰🇷', 'A', '2026-06-24T21:00:00-04:00', 'Monterrey'],
   // 25 jun — Grupos D, E y F
-  ['Turquía', 'Estados Unidos', '🇹🇷', '🇺🇸', 'D', '2026-06-25T15:00:00-04:00', 'Los Ángeles'],
-  ['Paraguay', 'Australia', '🇵🇾', '🇦🇺', 'D', '2026-06-25T15:00:00-04:00', 'San Francisco'],
-  ['Curazao', 'Costa de Marfil', '🇨🇼', '🇨🇮', 'E', '2026-06-25T18:00:00-04:00', 'Filadelfia'],
-  ['Ecuador', 'Alemania', '🇪🇨', '🇩🇪', 'E', '2026-06-25T18:00:00-04:00', 'Nueva York'],
-  ['Japón', 'Suecia', '🇯🇵', '🇸🇪', 'F', '2026-06-25T21:00:00-04:00', 'Dallas'],
-  ['Túnez', 'Países Bajos', '🇹🇳', '🇳🇱', 'F', '2026-06-25T21:00:00-04:00', 'Kansas City'],
+  ['Curazao', 'Costa de Marfil', '🇨🇼', '🇨🇮', 'E', '2026-06-25T16:00:00-04:00', 'Filadelfia'],
+  ['Ecuador', 'Alemania', '🇪🇨', '🇩🇪', 'E', '2026-06-25T16:00:00-04:00', 'Nueva York'],
+  ['Japón', 'Suecia', '🇯🇵', '🇸🇪', 'F', '2026-06-25T19:00:00-04:00', 'Dallas'],
+  ['Túnez', 'Países Bajos', '🇹🇳', '🇳🇱', 'F', '2026-06-25T19:00:00-04:00', 'Kansas City'],
+  ['Turquía', 'Estados Unidos', '🇹🇷', '🇺🇸', 'D', '2026-06-25T22:00:00-04:00', 'Los Ángeles'],
+  ['Paraguay', 'Australia', '🇵🇾', '🇦🇺', 'D', '2026-06-25T22:00:00-04:00', 'San Francisco'],
   // 26 jun — Grupos G, H e I
-  ['Egipto', 'Irán', '🇪🇬', '🇮🇷', 'G', '2026-06-26T15:00:00-04:00', 'Seattle'],
-  ['Nueva Zelanda', 'Bélgica', '🇳🇿', '🇧🇪', 'G', '2026-06-26T15:00:00-04:00', 'Vancouver'],
-  ['Cabo Verde', 'Arabia Saudita', '🇨🇻', '🇸🇦', 'H', '2026-06-26T18:00:00-04:00', 'Houston'],
-  ['Uruguay', 'España', '🇺🇾', '🇪🇸', 'H', '2026-06-26T18:00:00-04:00', 'Guadalajara'],
-  ['Noruega', 'Francia', '🇳🇴', '🇫🇷', 'I', '2026-06-26T21:00:00-04:00', 'Boston'],
-  ['Senegal', 'Irak', '🇸🇳', '🇮🇶', 'I', '2026-06-26T21:00:00-04:00', 'Toronto'],
+  ['Noruega', 'Francia', '🇳🇴', '🇫🇷', 'I', '2026-06-26T15:00:00-04:00', 'Boston'],
+  ['Senegal', 'Irak', '🇸🇳', '🇮🇶', 'I', '2026-06-26T15:00:00-04:00', 'Toronto'],
+  ['Cabo Verde', 'Arabia Saudita', '🇨🇻', '🇸🇦', 'H', '2026-06-26T20:00:00-04:00', 'Houston'],
+  ['Uruguay', 'España', '🇺🇾', '🇪🇸', 'H', '2026-06-26T20:00:00-04:00', 'Guadalajara'],
+  ['Egipto', 'Irán', '🇪🇬', '🇮🇷', 'G', '2026-06-26T23:00:00-04:00', 'Seattle'],
+  ['Nueva Zelanda', 'Bélgica', '🇳🇿', '🇧🇪', 'G', '2026-06-26T23:00:00-04:00', 'Vancouver'],
   // 27 jun — Grupos J, K y L
-  ['Argelia', 'Austria', '🇩🇿', '🇦🇹', 'J', '2026-06-27T15:00:00-04:00', 'Kansas City'],
-  ['Jordania', 'Argentina', '🇯🇴', '🇦🇷', 'J', '2026-06-27T15:00:00-04:00', 'Dallas'],
-  ['Colombia', 'Portugal', '🇨🇴', '🇵🇹', 'K', '2026-06-27T18:00:00-04:00', 'Miami'],
-  ['RD Congo', 'Uzbekistán', '🇨🇩', '🇺🇿', 'K', '2026-06-27T18:00:00-04:00', 'Atlanta'],
-  ['Panamá', 'Inglaterra', '🇵🇦', '🏴', 'L', '2026-06-27T21:00:00-04:00', 'Nueva York'],
-  ['Croacia', 'Ghana', '🇭🇷', '🇬🇭', 'L', '2026-06-27T21:00:00-04:00', 'Filadelfia'],
+  ['Panamá', 'Inglaterra', '🇵🇦', '🏴', 'L', '2026-06-27T17:00:00-04:00', 'Nueva York'],
+  ['Croacia', 'Ghana', '🇭🇷', '🇬🇭', 'L', '2026-06-27T17:00:00-04:00', 'Filadelfia'],
+  ['Colombia', 'Portugal', '🇨🇴', '🇵🇹', 'K', '2026-06-27T19:30:00-04:00', 'Miami'],
+  ['RD Congo', 'Uzbekistán', '🇨🇩', '🇺🇿', 'K', '2026-06-27T19:30:00-04:00', 'Atlanta'],
+  ['Argelia', 'Austria', '🇩🇿', '🇦🇹', 'J', '2026-06-27T22:00:00-04:00', 'Kansas City'],
+  ['Jordania', 'Argentina', '🇯🇴', '🇦🇷', 'J', '2026-06-27T22:00:00-04:00', 'Dallas'],
 ];
 
 // Sembrar solo la PRIMERA vez (no si el admin borró todos los partidos a
@@ -174,6 +177,16 @@ if (getMeta('seeded') === null) {
   }
   setMeta('seeded', '1');
   console.log(`[db] Precargados ${SEED_MATCHES.length} partidos del Mundial 2026.`);
+}
+
+// Corrección de horarios (una sola vez) para bases ya existentes: pone la hora
+// correcta de cada partido emparejando por equipos, SIN tocar predicciones.
+if (getMeta('times_fixed_v3') === null) {
+  const upd = db.prepare('UPDATE matches SET kickoff = ? WHERE home = ? AND away = ?');
+  let n = 0;
+  for (const m of SEED_MATCHES) n += upd.run(m[5], m[0], m[1]).changes;
+  setMeta('times_fixed_v3', '1');
+  if (n) console.log(`[db] Horarios corregidos en ${n} partidos.`);
 }
 
 module.exports = { db, getMeta, setMeta, DB_PATH };
