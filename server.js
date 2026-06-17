@@ -198,6 +198,12 @@ function buildState(token) {
       // solo el total y sí se muestra.
       counts: { home: 0, draw: 0, away: 0 },
       total_picks: list.length,
+      // QUIÉN ya pronosticó (solo nombres, NO su elección) — para ver a quién
+      // le falta antes de que empiece el partido.
+      predicted_by: list.map((pr) => {
+        const pl = playerById.get(pr.player_id);
+        return { id: pr.player_id, name: pl ? pl.name : '?', emoji: pl ? pl.emoji : '🙂' };
+      }),
     };
     // Revelar el desglose y quién eligió qué solo cuando el partido ya cerró.
     if (lock.locked) {

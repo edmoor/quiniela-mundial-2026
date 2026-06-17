@@ -143,6 +143,20 @@ function predictorBody(m) {
     <div class="hint center" style="margin-top:9px">${pick ? 'Ajusta − / + para el marcador exacto (+3 pts)' : 'Elige quién gana y el marcador'}</div>`;
 }
 
+// Línea de "quién ya puso / quién falta" para partidos ABIERTOS (solo nombres).
+function participantsLine(m) {
+  const all = STATE.standings || [];
+  if (!all.length) return '';
+  const did = m.predicted_by || [];
+  const didIds = new Set(did.map((p) => p.id));
+  const missing = all.filter((p) => !didIds.has(p.id));
+  let out = '<div class="parts">';
+  out += `<div class="prow ya"><span class="plab">✅ Ya (${did.length})</span> ${did.length ? did.map((p) => `${esc(p.emoji)} ${esc(p.name)}`).join(' · ') : '<span class="muted">nadie aún</span>'}</div>`;
+  if (missing.length) out += `<div class="prow falta"><span class="plab">⏳ Faltan (${missing.length})</span> ${missing.map((p) => esc(p.name)).join(' · ')}</div>`;
+  else if (did.length) out += '<div class="prow ya"><span class="plab">🎉</span> ¡Ya pusieron todos!</div>';
+  return out + '</div>';
+}
+
 function matchCard(m) {
   const me = STATE.me;
   const myPred = me && me.predictions ? me.predictions[m.id] : undefined;
@@ -157,7 +171,7 @@ function matchCard(m) {
 
   // Abierto y sin pronosticar -> predictor
   if (!locked && !myPred) {
-    return `<div class="match" data-mid="${m.id}">${head}${predictorBody(m)}</div>`;
+    return `<div class="match" data-mid="${m.id}">${head}${predictorBody(m)}${participantsLine(m)}</div>`;
   }
 
   // Cuerpo estático
@@ -195,7 +209,7 @@ function matchCard(m) {
       extra += `<button class="btn secondary small" data-reveal="${m.id}" style="width:100%;margin-top:11px">👁️ Ver qué puso cada quien · ${m.picks.length}</button>`;
     }
   }
-  return `<div class="match" data-mid="${m.id}">${head}${body}<div class="m-foot">${foot}</div>${extra}</div>`;
+  return `<div class="match" data-mid="${m.id}">${head}${body}<div class="m-foot">${foot}</div>${extra}${!locked ? participantsLine(m) : ''}</div>`;
 }
 
 /* ---------- interacción del predictor ---------- */

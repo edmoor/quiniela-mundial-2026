@@ -187,6 +187,14 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .pill.muted { color: var(--muted); }
 .lockmsg { color: var(--faint); font-size: 12.5px; font-weight: 600; }
 
+/* Quién ya puso / quién falta (partidos abiertos) */
+.parts { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; line-height: 1.45; }
+.prow { color: var(--muted); }
+.prow .plab { font-weight: 800; margin-right: 5px; }
+.prow.ya .plab { color: var(--emerald); }
+.prow.falta { color: var(--txt); }
+.prow.falta .plab { color: var(--gold); }
+
 /* Barra de distribución */
 .distrib { height: 7px; border-radius: 999px; overflow: hidden; display: flex; margin-top: 12px; background: rgba(255,255,255,.06); }
 .distrib i { height: 100%; transition: width .8s var(--ease); }
