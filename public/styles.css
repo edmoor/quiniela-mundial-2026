@@ -99,6 +99,14 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .center { text-align: center; }
 .hint { font-size: 12px; color: var(--faint); }
 
+/* ---------- Filtro Próximos / Jugados / Todos ---------- */
+.filterbar { display: flex; gap: 7px; margin: 4px 2px 14px; }
+.fbtn { flex: 1; background: rgba(255,255,255,.04); border: 1px solid var(--line); color: var(--muted);
+  border-radius: 12px; padding: 9px 6px; font-size: 12px; font-weight: 700; box-shadow: var(--inset);
+  transition: transform .2s var(--spring), background .2s, border-color .2s, color .2s; white-space: nowrap; }
+.fbtn:active { transform: scale(.95); }
+.fbtn.on { background: rgba(25,224,140,.14); border-color: var(--emerald); color: #d6ffe9; box-shadow: 0 0 18px -8px rgba(25,224,140,.7); }
+
 /* ---------- Encabezado de día ---------- */
 .dayhead { position: sticky; top: calc(60px + var(--safe-t)); z-index: 5; margin: 16px 0 10px;
   display: flex; align-items: center; gap: 10px; }

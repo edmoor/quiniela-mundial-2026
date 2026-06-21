@@ -15,6 +15,8 @@ let STATE = null;
 let TOKEN = localStorage.getItem(LS_TOKEN) || null;
 let ADMIN_PIN = localStorage.getItem(LS_ADMIN) || null;
 let currentTab = ['tabla', 'yo'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'partidos';
+let matchFilter = 'proximos';   // partidos (jugador): proximos | jugados | todos
+let adminFilter = 'proximos';   // partidos (admin)
 let pollTimer = null;
 let animateOnce = true;
 
@@ -106,8 +108,22 @@ function renderMatches(animate) {
     VIEW.innerHTML = html + `<div class="empty"><div class="big">⚽</div><p>Todavía no hay partidos.</p></div>`;
     return;
   }
+
+  let nProx = 0, nJug = 0;
+  for (const m of STATE.matches) { if (m.result) nJug++; else nProx++; }
+  html += `<div class="filterbar">
+    <button class="fbtn ${matchFilter === 'proximos' ? 'on' : ''}" data-filter="proximos">⏳ Próximos${nProx ? ` · ${nProx}` : ''}</button>
+    <button class="fbtn ${matchFilter === 'jugados' ? 'on' : ''}" data-filter="jugados">✅ Jugados${nJug ? ` · ${nJug}` : ''}</button>
+    <button class="fbtn ${matchFilter === 'todos' ? 'on' : ''}" data-filter="todos">Todos</button>
+  </div>`;
+
+  const list = STATE.matches.filter((m) => matchFilter === 'todos' ? true : matchFilter === 'jugados' ? !!m.result : !m.result);
+  if (!list.length) {
+    VIEW.innerHTML = html + `<div class="empty"><div class="big">🎉</div><p>${matchFilter === 'proximos' ? 'No quedan partidos por jugar.' : 'Aún no hay partidos jugados.'}</p></div>`;
+    return;
+  }
   let lastDay = null;
-  for (const m of STATE.matches) {
+  for (const m of list) {
     const day = fmtDay(m.kickoff);
     if (day !== lastDay) { html += `<div class="dayhead"><b>${esc(day)}</b></div>`; lastDay = day; }
     html += matchCard(m);
@@ -383,6 +399,8 @@ VIEW.addEventListener('click', (e) => {
   if (cf) { submitDraft(Number(cf.dataset.confirm)); return; }
   const rev = e.target.closest('[data-reveal]');
   if (rev) { showPicks(Number(rev.dataset.reveal)); return; }
+  const fb = e.target.closest('[data-filter]');
+  if (fb) { matchFilter = fb.dataset.filter; animateOnce = true; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   const act = e.target.closest('[data-act]');
   if (act) { const a = act.dataset.act; if (a === 'register') openRegister(); else if (a === 'restore') openRestore(); else if (a === 'showcode') showCode(); }
 });
@@ -506,6 +524,8 @@ function adminPanel() {
   m.addEventListener('click', (e) => {
     const a = e.target.closest('[data-admin]');
     if (a) { const w = a.dataset.admin; if (w === 'addmatch') return openMatchForm(null); if (w === 'settings') return openSettings(); if (w === 'players') return openPlayers(); }
+    const af = e.target.closest('[data-afilter]');
+    if (af) { adminFilter = af.dataset.afilter; return renderAdminMatches(m); }
     const as = e.target.closest('[data-astep]');
     if (as) return onAdminStep(Number(as.dataset.astep), as.dataset.side, Number(as.dataset.d));
     const sv = e.target.closest('[data-savescore]');
@@ -524,9 +544,19 @@ function adminPanel() {
 function renderAdminMatches(modal) {
   const box = modal.querySelector('#adminMatches'); if (!box) return;
   ADRAFT = {};
-  let html = '', lastDay = null;
-  for (const m of STATE.matches) {
-    ADRAFT[m.id] = { hs: m.home_score == null ? 0 : m.home_score, as: m.away_score == null ? 0 : m.away_score };
+  for (const m of STATE.matches) ADRAFT[m.id] = { hs: m.home_score == null ? 0 : m.home_score, as: m.away_score == null ? 0 : m.away_score };
+  if (!STATE.matches.length) { box.innerHTML = '<p class="empty">No hay partidos. Agrega uno.</p>'; return; }
+
+  let nProx = 0, nJug = 0;
+  for (const m of STATE.matches) { if (m.result) nJug++; else nProx++; }
+  let html = `<div class="filterbar">
+    <button class="fbtn ${adminFilter === 'proximos' ? 'on' : ''}" data-afilter="proximos">⏳ Por jugar${nProx ? ` · ${nProx}` : ''}</button>
+    <button class="fbtn ${adminFilter === 'jugados' ? 'on' : ''}" data-afilter="jugados">✅ Con marcador${nJug ? ` · ${nJug}` : ''}</button>
+    <button class="fbtn ${adminFilter === 'todos' ? 'on' : ''}" data-afilter="todos">Todos</button>
+  </div>`;
+  const list = STATE.matches.filter((m) => adminFilter === 'todos' ? true : adminFilter === 'jugados' ? !!m.result : !m.result);
+  let lastDay = null;
+  for (const m of list) {
     const day = fmtDay(m.kickoff);
     if (day !== lastDay) { html += `<div class="eyebrow" style="margin:14px 2px 8px">${esc(day)}</div>`; lastDay = day; }
     const saved = m.result ? `<div class="hint center" style="margin-top:6px">Guardado: <b class="num">${m.home_score}–${m.away_score}</b></div>` : '';
@@ -542,7 +572,7 @@ function renderAdminMatches(modal) {
         <button class="btn small danger" data-del="${m.id}" style="flex:0 0 auto">🗑️</button>
       </div>${saved}</div>`;
   }
-  if (!STATE.matches.length) html = `<p class="empty">No hay partidos. Agrega uno.</p>`;
+  if (!list.length) html += `<div class="empty"><div class="big">🎉</div><p>${adminFilter === 'proximos' ? 'Ya pusiste todos los marcadores.' : 'No hay partidos en esta vista.'}</p></div>`;
   box.innerHTML = html;
 }
 function goalboxAdmin(mid, side, val) {
