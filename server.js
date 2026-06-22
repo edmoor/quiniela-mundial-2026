@@ -392,7 +392,12 @@ function buildState(token) {
 // --- Autorización ----------------------------------------------------------
 function isAdmin(req) {
   const pin = req.headers['x-admin-pin'];
-  return pin && String(pin) === String(getMeta('admin_pin'));
+  if (!pin) return false;
+  if (String(pin) === String(getMeta('admin_pin'))) return true;
+  // El PIN de la variable de entorno siempre vale (lo usa el actualizador
+  // automático), aunque cambies el PIN visible en la app.
+  if (process.env.ADMIN_PIN && String(pin) === String(process.env.ADMIN_PIN)) return true;
+  return false;
 }
 
 // --- Manejadores de API ----------------------------------------------------
