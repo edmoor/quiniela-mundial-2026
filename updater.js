@@ -96,6 +96,7 @@ function resolveFromSummary(match, summary) {
   };
   offsides = sumStat('offsides');
   corners = sumStat('wonCorners');
+  const fouls = sumStat('foulsCommitted');
 
   const props = {
     first_goal: firstGoal || 'none',
@@ -106,6 +107,7 @@ function resolveFromSummary(match, summary) {
   };
   if (offsides != null) props.offsides = offsides;
   if (corners != null) props.corners_total = corners;
+  if (fouls != null) props.fouls_total = fouls;
 
   return { home_score, away_score, props };
 }
@@ -167,4 +169,7 @@ async function main() {
   log(`Resueltos: ${resolved}.` + (unmatched.length ? ` Sin emparejar (${unmatched.length}): ${unmatched.join(', ')}` : ''));
 }
 
-main().catch((e) => { log('ERROR', e.message); process.exit(1); });
+if (require.main === module) {
+  main().catch((e) => { log('ERROR', e.message); process.exit(1); });
+}
+module.exports = { resolveFromSummary, nameMatches };

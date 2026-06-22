@@ -141,6 +141,8 @@ const Q = {
   propPredsByPlayer: db.prepare('SELECT match_id, prop_key, value FROM prop_predictions WHERE player_id = ?'),
   propPredExists: db.prepare('SELECT 1 FROM prop_predictions WHERE player_id = ? AND match_id = ? LIMIT 1'),
   insertPropPrediction: db.prepare('INSERT INTO prop_predictions(player_id, match_id, prop_key, value, created_at) VALUES(?,?,?,?,?)'),
+  updatePrediction: db.prepare('UPDATE predictions SET pick = ?, home_goals = ?, away_goals = ? WHERE player_id = ? AND match_id = ?'),
+  deletePropsForPlayerMatch: db.prepare('DELETE FROM prop_predictions WHERE player_id = ? AND match_id = ?'),
 };
 
 // Puntos: marcador exacto = 3, acertar solo el resultado (1X2) = 1.
@@ -161,24 +163,26 @@ const PROPS = [
   { key: 'first_goal', label: '¿Quién mete el primer gol?', type: 'team3' },
   { key: 'odd_even', label: 'Total de goles: ¿par o impar?', type: 'choice', options: ['par', 'impar'] },
   { key: 'first_half_goal', label: '¿Gol en el 1er tiempo?', type: 'choice', options: ['si', 'no'] },
-  { key: 'offsides', label: '¿Cuántos offsides (fuera de lugar) en total?', type: 'number' },
-  { key: 'corners_ou', label: 'Total de córners', type: 'ou' },
+  { key: 'offsides', label: '¿Cuántos offsides en total?', type: 'number' },
+  { key: 'corners', label: '¿Cuántos córners en total?', type: 'number' },
+  { key: 'fouls', label: '¿Cuántas faltas en total?', type: 'number' },
   { key: 'first_card', label: '¿Quién recibe la 1ª tarjeta?', type: 'team3' },
   { key: 'red_card', label: '¿Habrá tarjeta roja?', type: 'choice', options: ['si', 'no'] },
 ];
 const PROP_BY_KEY = new Map(PROPS.map((p) => [p.key, p]));
+// Props numéricos: gana el MÁS CERCANO. Cada uno mapea a un campo de props_result.
+const CLOSEST = { offsides: 'offsides', corners: 'corners_total', fouls: 'fouls_total' };
 
 // Valida (y normaliza) el valor que manda un jugador para un prop.
 function validPropValue(prop, value) {
   if (prop.type === 'team3') return ['home', 'away', 'none'].includes(value) ? value : null;
-  if (prop.type === 'ou') return ['over', 'under'].includes(value) ? value : null;
   if (prop.type === 'choice') return prop.options.includes(value) ? value : null;
-  if (prop.type === 'number') { const n = Number(value); return Number.isInteger(n) && n >= 0 && n <= 50 ? String(n) : null; }
+  if (prop.type === 'number') { const n = Number(value); return Number.isInteger(n) && n >= 0 && n <= 99 ? String(n) : null; }
   return null;
 }
 
-// ¿El prop quedó correcto? (todos menos offsides, que es "el más cercano").
-function propIsCorrect(propKey, value, res, m) {
+// ¿El prop quedó correcto? (los de elección; los numéricos van por "más cercano").
+function propIsCorrect(propKey, value, res) {
   if (res == null) return false;
   switch (propKey) {
     case 'first_goal': return value === res.first_goal;
@@ -186,11 +190,6 @@ function propIsCorrect(propKey, value, res, m) {
     case 'first_half_goal': return value === res.first_half_goal;
     case 'first_card': return value === res.first_card;
     case 'red_card': return value === res.red_card;
-    case 'corners_ou': {
-      if (res.corners_total == null) return false;
-      const line = m.corner_line == null ? 9.5 : m.corner_line;
-      return value === (res.corners_total > line ? 'over' : 'under');
-    }
     default: return false;
   }
 }
@@ -257,30 +256,37 @@ function buildState(token) {
   for (const m of matches) {
     if (m.props_result) { try { resByMatch.set(m.id, JSON.parse(m.props_result)); } catch (_) {} }
   }
-  const offsidesWinners = new Map(); // match_id -> Set(player_id) más cercano(s)
-  const offByMatch = new Map();
+  // Props numéricos (offsides, córners, faltas): gana el MÁS CERCANO por partido.
+  const closestWinners = new Map(); // `${matchId}:${propKey}` -> Set(player_id)
+  const numByMatchKey = new Map();
   for (const pp of propPreds) {
-    if (pp.prop_key !== 'offsides') continue;
-    if (!offByMatch.has(pp.match_id)) offByMatch.set(pp.match_id, []);
-    offByMatch.get(pp.match_id).push(pp);
+    if (!CLOSEST[pp.prop_key]) continue;
+    const kk = pp.match_id + ':' + pp.prop_key;
+    if (!numByMatchKey.has(kk)) numByMatchKey.set(kk, []);
+    numByMatchKey.get(kk).push(pp);
   }
-  for (const [mid, list] of offByMatch) {
+  for (const [kk, list] of numByMatchKey) {
+    const sep = kk.lastIndexOf(':');
+    const mid = Number(kk.slice(0, sep)), key = kk.slice(sep + 1);
     const res = resByMatch.get(mid);
-    if (!res || res.offsides == null) continue;
+    const actual = res ? res[CLOSEST[key]] : null;
+    if (actual == null) continue;
     let best = Infinity;
-    for (const pp of list) best = Math.min(best, Math.abs(Number(pp.value) - res.offsides));
+    for (const pp of list) best = Math.min(best, Math.abs(Number(pp.value) - actual));
     const winners = new Set();
-    for (const pp of list) if (Math.abs(Number(pp.value) - res.offsides) === best) winners.add(pp.player_id);
-    offsidesWinners.set(mid, winners);
+    for (const pp of list) if (Math.abs(Number(pp.value) - actual) === best) winners.add(pp.player_id);
+    closestWinners.set(kk, winners);
   }
   for (const pp of propPreds) {
     const m = matchById.get(pp.match_id);
     if (!m) continue;
     const res = resByMatch.get(pp.match_id);
     if (!res) continue;
-    const ok = pp.prop_key === 'offsides'
-      ? !!(offsidesWinners.get(pp.match_id) && offsidesWinners.get(pp.match_id).has(pp.player_id))
-      : propIsCorrect(pp.prop_key, pp.value, res, m);
+    let ok;
+    if (CLOSEST[pp.prop_key]) {
+      const w = closestWinners.get(pp.match_id + ':' + pp.prop_key);
+      ok = !!(w && w.has(pp.player_id));
+    } else ok = propIsCorrect(pp.prop_key, pp.value, res);
     if (ok) {
       for (const T of [tAll, roundOf(m) === 1 ? t1 : t2]) {
         const t = T.get(pp.player_id);
@@ -455,11 +461,10 @@ async function handleApi(req, res, pathname) {
     const match = Q.matchById.get(matchId);
     if (!match) return sendJSON(res, 404, { error: 'Partido no encontrado.' });
     if (isLocked(match, Date.now()).locked) {
-      return sendJSON(res, 409, { error: 'Este partido ya está cerrado.' });
+      return sendJSON(res, 409, { error: 'Este partido ya empezó, ya no se puede cambiar.' });
     }
-    if (Q.predForPlayerMatch.get(player.id, matchId)) {
-      return sendJSON(res, 409, { error: 'Ya hiciste tu predicción y no se puede cambiar.' });
-    }
+    // Se puede CAMBIAR la predicción mientras el partido no empiece.
+    const exists = !!Q.predForPlayerMatch.get(player.id, matchId);
     // Extras (props): obligatorios si el partido los ofrece (ronda 2, tras Argentina).
     const propRows = [];
     if (hasProps(match)) {
@@ -473,12 +478,17 @@ async function handleApi(req, res, pathname) {
     const nowIso = new Date().toISOString();
     try {
       db.exec('BEGIN IMMEDIATE');
-      Q.insertPrediction.run(player.id, matchId, pick, hg, ag, nowIso);
+      if (exists) {
+        Q.updatePrediction.run(pick, hg, ag, player.id, matchId);
+        Q.deletePropsForPlayerMatch.run(player.id, matchId);
+      } else {
+        Q.insertPrediction.run(player.id, matchId, pick, hg, ag, nowIso);
+      }
       for (const [k, v] of propRows) Q.insertPropPrediction.run(player.id, matchId, k, v, nowIso);
       db.exec('COMMIT');
     } catch (e) {
       try { db.exec('ROLLBACK'); } catch (_) {}
-      return sendJSON(res, 409, { error: 'Ya hiciste tu predicción y no se puede cambiar.' });
+      return sendJSON(res, 500, { error: 'No se pudo guardar. Intenta de nuevo.' });
     }
     return sendJSON(res, 201, { ok: true });
   }
@@ -580,6 +590,7 @@ async function handleApi(req, res, pathname) {
         if (['si', 'no'].includes(r.first_half_goal)) clean.first_half_goal = r.first_half_goal;
         if (Number.isInteger(Number(r.offsides))) clean.offsides = Number(r.offsides);
         if (Number.isInteger(Number(r.corners_total))) clean.corners_total = Number(r.corners_total);
+        if (Number.isInteger(Number(r.fouls_total))) clean.fouls_total = Number(r.fouls_total);
         if (['home', 'away', 'none'].includes(r.first_card)) clean.first_card = r.first_card;
         if (['si', 'no'].includes(r.red_card)) clean.red_card = r.red_card;
         Q.setProps.run(JSON.stringify(clean), id);

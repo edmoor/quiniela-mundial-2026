@@ -18,6 +18,7 @@ let currentTab = ['tabla', 'yo'].includes(location.hash.slice(1)) ? location.has
 let matchFilter = 'proximos';   // partidos (jugador): proximos | jugados | todos
 let adminFilter = 'proximos';   // partidos (admin)
 let roundFilter = 2;            // tabla: 2 (default) o 1
+const EDITING = new Set();      // partidos abiertos que el jugador está re-editando
 let pollTimer = null;
 let animateOnce = true;
 
@@ -147,10 +148,16 @@ function pchip(mid, key, val, label, sub) {
   const sel = d && d.props && d.props[key] === val ? 'sel' : '';
   return `<button class="pchip ${sel}" data-prop="${key}" data-pval="${val}" data-mid="${mid}">${sub ? `<small>${esc(sub)}</small>` : ''}${esc(label)}</button>`;
 }
+function pnum(mid, key, label, sub) {
+  const v = (DRAFTS[mid] && DRAFTS[mid].props && DRAFTS[mid].props[key] != null) ? DRAFTS[mid].props[key] : 0;
+  return `<div class="prop"><div class="prop-q">${label} <small>${esc(sub)}</small></div>
+    <div class="goalbox" style="margin:5px auto 0;width:max-content">
+      <button data-pstep="${mid}" data-pkey="${key}" data-d="-1">−</button>
+      <span class="g num" data-pnum="${mid}-${key}">${v}</span>
+      <button data-pstep="${mid}" data-pkey="${key}" data-d="1">+</button></div></div>`;
+}
 function propsBody(m) {
   const mid = m.id;
-  const line = m.corner_line;
-  const off = (DRAFTS[mid] && DRAFTS[mid].props && DRAFTS[mid].props.offsides != null) ? DRAFTS[mid].props.offsides : 0;
   return `<div class="props">
     <div class="props-title">⭐ Extras · cada acierto +1 punto</div>
     <div class="prop"><div class="prop-q">⚽ ¿Quién mete el primer gol?</div><div class="prop-opts c3">
@@ -159,11 +166,9 @@ function propsBody(m) {
       ${pchip(mid, 'odd_even', 'par', 'Par')}${pchip(mid, 'odd_even', 'impar', 'Impar')}</div></div>
     <div class="prop"><div class="prop-q">⏱️ ¿Gol en el 1er tiempo?</div><div class="prop-opts c2">
       ${pchip(mid, 'first_half_goal', 'si', 'Sí')}${pchip(mid, 'first_half_goal', 'no', 'No')}</div></div>
-    <div class="prop"><div class="prop-q">🚩 ¿Cuántos offsides en total? <small>gana el más cercano</small></div>
-      <div class="goalbox" style="margin:4px auto 0;width:max-content">
-        <button data-pstep="${mid}" data-d="-1">−</button><span class="g num" data-poff="${mid}">${off}</span><button data-pstep="${mid}" data-d="1">+</button></div></div>
-    <div class="prop"><div class="prop-q">🏳️ Total de córners, ¿+ o − de ${line}?</div><div class="prop-opts c2">
-      ${pchip(mid, 'corners_ou', 'under', 'Menos', String(line))}${pchip(mid, 'corners_ou', 'over', 'Más', String(line))}</div></div>
+    ${pnum(mid, 'offsides', '🚩 ¿Cuántos offsides en total?', 'gana el más cercano')}
+    ${pnum(mid, 'corners', '🏳️ ¿Cuántos córners en total?', 'gana el más cercano')}
+    ${pnum(mid, 'fouls', '🦵 ¿Cuántas faltas en total?', 'gana el más cercano')}
     <div class="prop"><div class="prop-q">🟨 ¿Quién recibe la 1ª tarjeta?</div><div class="prop-opts c3">
       ${pchip(mid, 'first_card', 'home', m.home)}${pchip(mid, 'first_card', 'none', 'Ninguna')}${pchip(mid, 'first_card', 'away', m.away)}</div></div>
     <div class="prop"><div class="prop-q">🟥 ¿Habrá tarjeta roja?</div><div class="prop-opts c2">
@@ -186,8 +191,8 @@ function predictorBody(m) {
       ${wchip(m.id, 'away', pick, 'Gana', m.away)}
     </div>
     ${m.has_props ? propsBody(m) : ''}
-    <button class="confirm" data-confirm="${m.id}" ${pick ? '' : 'disabled'}>Enviar pronóstico 🔒</button>
-    <div class="hint center" style="margin-top:9px">${pick ? (m.has_props ? 'Marcador exacto +3 · y elige los extras 👆' : 'Ajusta − / + para el marcador exacto (+3 pts)') : 'Elige quién gana y el marcador'}</div>`;
+    <button class="confirm" data-confirm="${m.id}" ${pick ? '' : 'disabled'}>${EDITING.has(m.id) ? 'Guardar cambios' : 'Enviar pronóstico'}</button>
+    <div class="hint center" style="margin-top:9px">${pick ? (m.has_props ? 'Marcador exacto +3 · y elige los extras 👆 · puedes cambiar hasta que empiece' : 'Ajusta − / + para el marcador exacto (+3 pts)') : 'Elige quién gana y el marcador'}</div>`;
 }
 
 // Línea de "quién ya puso / quién falta" para partidos ABIERTOS (solo nombres).
@@ -216,8 +221,10 @@ function propsResultBlock(m) {
   if (r.first_goal != null) add('Primer gol', teamName(r.first_goal), myp && myp.first_goal === r.first_goal);
   if (r.odd_even != null) add('Goles par/impar', r.odd_even === 'par' ? 'Par' : 'Impar', myp && myp.odd_even === r.odd_even);
   if (r.first_half_goal != null) add('Gol 1er tiempo', yn(r.first_half_goal), myp && myp.first_half_goal === r.first_half_goal);
-  if (r.offsides != null) rows.push(`<div class="pr-row"><span class="pr-q">Offsides${myp ? ` (tú: ${esc(myp.offsides)})` : ''}</span><span class="pr-val">${r.offsides}</span></div>`);
-  if (r.corners_total != null) { const ou = r.corners_total > m.corner_line ? 'over' : 'under'; add(`Córners (${r.corners_total})`, ou === 'over' ? `Más de ${m.corner_line}` : `Menos de ${m.corner_line}`, myp && myp.corners_ou === ou); }
+  const numRow = (q, actual, mine) => rows.push(`<div class="pr-row"><span class="pr-q">${esc(q)}${mine != null ? ` (tú: ${esc(mine)})` : ''}</span><span class="pr-val">${actual}</span></div>`);
+  if (r.offsides != null) numRow('Offsides', r.offsides, myp ? myp.offsides : null);
+  if (r.corners_total != null) numRow('Córners', r.corners_total, myp ? myp.corners : null);
+  if (r.fouls_total != null) numRow('Faltas', r.fouls_total, myp ? myp.fouls : null);
   if (r.first_card != null) add('1ª tarjeta', teamName(r.first_card), myp && myp.first_card === r.first_card);
   if (r.red_card != null) add('Tarjeta roja', yn(r.red_card), myp && myp.red_card === r.red_card);
   if (!rows.length) return '';
@@ -236,8 +243,8 @@ function matchCard(m) {
   else if (locked) status = `<span class="m-status lock">🔒 Cerrado</span>`;
   const head = `<div class="m-head">${m.grp ? `<span class="grp">Grupo ${esc(m.grp)}</span>` : ''}<span class="time num">${esc(fmtTime(m.kickoff))}</span>${m.venue ? `<span class="dot"></span><span>${esc(m.venue)}</span>` : ''}${status}</div>`;
 
-  // Abierto y sin pronosticar -> predictor
-  if (!locked && !myPred) {
+  // Abierto: predictor si no ha pronosticado, o si está re-editando (hasta que empiece).
+  if (!locked && (!myPred || EDITING.has(m.id))) {
     return `<div class="match" data-mid="${m.id}">${head}${predictorBody(m)}${participantsLine(m)}</div>`;
   }
 
@@ -262,7 +269,7 @@ function matchCard(m) {
       else foot += `<span class="pill no">✗ Fallaste</span>`;
       foot += `<span class="pill muted">Tu marcador <span class="num">${ps}</span></span>`;
     } else {
-      foot += `<span class="pill mine">Tu pronóstico <span class="num">${ps}</span></span><span class="lockmsg">🔒 no se puede cambiar</span>`;
+      foot += `<span class="pill mine">Tu pronóstico <span class="num">${ps}</span></span><button class="btn secondary small" data-editpred="${m.id}" style="padding:5px 11px;font-size:12px">✏️ Cambiar</button>`;
     }
   } else if (locked) {
     foot += `<span class="lockmsg">Apuestas cerradas</span>`;
@@ -322,13 +329,24 @@ function onPropChip(mid, key, val) {
   const card = VIEW.querySelector(`.match[data-mid="${mid}"]`);
   if (card) card.querySelectorAll(`.pchip[data-prop="${key}"]`).forEach((c) => c.classList.toggle('sel', c.dataset.pval === val));
 }
-function onPropStep(mid, delta) {
+function onPropStep(mid, key, delta) {
   const d = DRAFTS[mid] || (DRAFTS[mid] = { hg: 0, ag: 0, touched: false });
   if (!d.props) d.props = {};
-  const cur = d.props.offsides != null ? d.props.offsides : 0;
-  d.props.offsides = clamp(cur + delta, 0, 50);
-  const el = VIEW.querySelector(`[data-poff="${mid}"]`);
-  if (el && el.textContent !== String(d.props.offsides)) { el.textContent = d.props.offsides; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+  const cur = d.props[key] != null ? d.props[key] : 0;
+  d.props[key] = clamp(cur + delta, 0, 99);
+  const el = VIEW.querySelector(`[data-pnum="${mid}-${key}"]`);
+  if (el && el.textContent !== String(d.props[key])) { el.textContent = d.props[key]; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+}
+function onEditPred(mid) {
+  const me = STATE.me; if (!me || !me.predictions[mid]) return;
+  const pr = me.predictions[mid];
+  const props = {};
+  if (me.props && me.props[mid]) for (const k in me.props[mid]) {
+    props[k] = ['offsides', 'corners', 'fouls'].includes(k) ? Number(me.props[mid][k]) : me.props[mid][k];
+  }
+  DRAFTS[mid] = { hg: pr.home_goals, ag: pr.away_goals, touched: true, props };
+  EDITING.add(mid);
+  animateOnce = false; render();
 }
 
 async function submitDraft(mid) {
@@ -341,22 +359,22 @@ async function submitDraft(mid) {
   let props = null;
   if (m.has_props) {
     const pp = d.props || {};
-    if (pp.offsides == null) pp.offsides = 0;
-    const missing = ['first_goal', 'odd_even', 'first_half_goal', 'corners_ou', 'first_card', 'red_card'].filter((k) => pp[k] == null);
+    ['offsides', 'corners', 'fouls'].forEach((k) => { if (pp[k] == null) pp[k] = 0; });
+    const missing = ['first_goal', 'odd_even', 'first_half_goal', 'first_card', 'red_card'].filter((k) => pp[k] == null);
     if (missing.length) { toast('Te faltan extras por elegir 👇', 'err'); return; }
-    props = { first_goal: pp.first_goal, odd_even: pp.odd_even, first_half_goal: pp.first_half_goal, offsides: pp.offsides, corners_ou: pp.corners_ou, first_card: pp.first_card, red_card: pp.red_card };
+    props = { first_goal: pp.first_goal, odd_even: pp.odd_even, first_half_goal: pp.first_half_goal, offsides: pp.offsides, corners: pp.corners, fouls: pp.fouls, first_card: pp.first_card, red_card: pp.red_card };
   }
   const ok = await confirmModal('Confirmar pronóstico',
     `${esc(m.home_emoji)} <b>${esc(m.home)}</b> &nbsp;<span class="num" style="font-size:20px">${d.hg} – ${d.ag}</span>&nbsp; <b>${esc(m.away)}</b> ${esc(m.away_emoji)}
-     <br><br>${esc(win)}${props ? ' <b>+ tus 7 extras</b>' : ''}<br><br><span style="color:var(--danger);font-weight:700">⚠️ Una vez confirmado no se puede cambiar.</span>`,
-    'Confirmar 🔒', 'Cancelar');
+     <br><br>${esc(win)}${props ? ' <b>+ tus extras</b>' : ''}<br><br><span style="color:var(--gold);font-weight:700">✏️ Puedes cambiarlo hasta que empiece el partido.</span>`,
+    'Confirmar', 'Cancelar');
   if (!ok) return;
   try {
     await api('/api/predictions', { method: 'POST', body: { match_id: mid, home_goals: d.hg, away_goals: d.ag, props } });
     const card = VIEW.querySelector(`.match[data-mid="${mid}"]`);
     if (card) { const r = card.getBoundingClientRect(); confetti(r.left + r.width / 2, r.top + 50); }
-    delete DRAFTS[mid];
-    toast('¡Pronóstico guardado! 🔒', 'ok');
+    delete DRAFTS[mid]; EDITING.delete(mid);
+    toast('¡Pronóstico guardado! ✅', 'ok');
     await loadState();
   } catch (err) { toast(err.message, 'err'); await loadState(); }
 }
@@ -483,7 +501,9 @@ VIEW.addEventListener('click', (e) => {
   const pc = e.target.closest('[data-prop]');
   if (pc) { onPropChip(Number(pc.dataset.mid), pc.dataset.prop, pc.dataset.pval); return; }
   const ps = e.target.closest('[data-pstep]');
-  if (ps) { onPropStep(Number(ps.dataset.pstep), Number(ps.dataset.d)); return; }
+  if (ps) { onPropStep(Number(ps.dataset.pstep), ps.dataset.pkey, Number(ps.dataset.d)); return; }
+  const ep = e.target.closest('[data-editpred]');
+  if (ep) { onEditPred(Number(ep.dataset.editpred)); return; }
   const cf = e.target.closest('[data-confirm]');
   if (cf) { submitDraft(Number(cf.dataset.confirm)); return; }
   const rev = e.target.closest('[data-reveal]');
