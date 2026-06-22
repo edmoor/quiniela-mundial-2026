@@ -184,6 +184,27 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .confirm:active { transform: scale(.97); }
 .confirm:disabled { opacity: .4; filter: grayscale(.6); box-shadow: none; }
 
+/* Extras (props) */
+.props { margin-top: 14px; border-top: 1px dashed var(--line); padding-top: 13px; display: flex; flex-direction: column; gap: 13px; }
+.props-title { font-size: 11px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: var(--gold); text-align: center; }
+.prop-q { font-size: 12.5px; font-weight: 700; color: var(--txt); margin-bottom: 7px; text-align: center; }
+.prop-q small { font-weight: 600; color: var(--faint); font-size: 11px; }
+.prop-opts { display: grid; gap: 7px; }
+.prop-opts.c2 { grid-template-columns: 1fr 1fr; }
+.prop-opts.c3 { grid-template-columns: 1fr .72fr 1fr; }
+.pchip { border: 1px solid var(--line); background: rgba(255,255,255,.03); border-radius: 11px; padding: 9px 6px; font-size: 12px; font-weight: 700;
+  color: var(--muted); transition: transform .2s var(--spring), border-color .2s, color .2s, background .2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pchip:active { transform: scale(.94); }
+.pchip small { display: block; font-size: 9px; font-weight: 700; color: var(--faint); }
+.pchip.sel { border-color: var(--gold); background: rgba(255,207,90,.14); color: #fff0cf; box-shadow: 0 0 18px -8px rgba(255,207,90,.6); }
+.pchip.sel small { color: inherit; opacity: .85; }
+.prop-res { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+.prop-res .pr-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.prop-res .pr-q { flex: 1; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prop-res .pr-val { font-weight: 700; color: var(--txt); }
+.prop-res .pr-row.hit .pr-val { color: var(--emerald); }
+.prop-res .pr-row.miss .pr-val { color: var(--faint); }
+
 /* Estado: ya pronosticado / cerrado */
 .m-foot { margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 5px 11px; font-size: 12px; font-weight: 700; border: 1px solid var(--line); }

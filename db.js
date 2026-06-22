@@ -36,9 +36,24 @@ db.exec(`
     result     TEXT,                   -- 'home' | 'draw' | 'away' | NULL (derivado del marcador)
     home_score INTEGER,                -- goles reales del local (NULL = sin jugar)
     away_score INTEGER,                -- goles reales del visitante
+    corner_line REAL DEFAULT 9.5,      -- línea over/under de córners (editable)
+    props_result TEXT,                 -- JSON con el resultado real de los extras
+    api_fixture_id INTEGER,            -- id del partido en API-Football (para auto-actualizar)
     closed     INTEGER NOT NULL DEFAULT 0,
     sort_key   TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS prop_predictions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id  INTEGER NOT NULL,
+    match_id   INTEGER NOT NULL,
+    prop_key   TEXT NOT NULL,          -- first_goal | odd_even | first_half_goal | offsides | corners_ou | first_card | red_card
+    value      TEXT NOT NULL,          -- la elección del jugador (texto o número)
+    created_at TEXT NOT NULL,
+    UNIQUE(player_id, match_id, prop_key),
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE,
+    FOREIGN KEY(match_id)  REFERENCES matches(id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS predictions (
@@ -69,6 +84,9 @@ function ensureColumn(table, col, def) {
 }
 ensureColumn('matches', 'home_score', 'INTEGER');
 ensureColumn('matches', 'away_score', 'INTEGER');
+ensureColumn('matches', 'corner_line', 'REAL DEFAULT 9.5');
+ensureColumn('matches', 'props_result', 'TEXT');
+ensureColumn('matches', 'api_fixture_id', 'INTEGER');
 ensureColumn('predictions', 'home_goals', 'INTEGER');
 ensureColumn('predictions', 'away_goals', 'INTEGER');
 
