@@ -115,11 +115,20 @@ async function main() {
 
   // 1) Nuestro estado (partidos a resolver).
   const state = await getJSON(`${BASE}/api/state`);
+  const now = Date.now();
   const pending = state.matches.filter((m) => !m.result || (m.has_props && !m.props_result));
-  if (!pending.length) { log('Nada pendiente. Todo al día.'); return; }
-  log(`Pendientes: ${pending.length}`);
+  // SOLO tocamos ESPN si hay partidos que YA deberían haber terminado (≥95 min
+  // desde su inicio) y siguen sin resolver. Si no hay ninguno, ni llamamos a
+  // ESPN — así no la machacamos y no hay riesgo de ban.
+  const GRACE = 95 * 60 * 1000;
+  const due = pending.filter((m) => Date.parse(m.kickoff) + GRACE <= now);
+  if (!due.length) {
+    log(`Sin partidos por cerrar ahora (pendientes futuros: ${pending.length}). No se llama a ESPN.`);
+    return;
+  }
+  log(`Partidos por cerrar: ${due.length}`);
 
-  // 2) Calendario de ESPN (1 llamada, todo el rango del torneo).
+  // 2) Calendario de ESPN (1 sola llamada, todo el rango del torneo).
   const sb = await getJSON(`${ESPN}/scoreboard?dates=${SCOREBOARD_RANGE}&limit=400`);
   const espnEvents = (sb.events || []).map((e) => {
     const c = e.competitions[0].competitors;
@@ -127,7 +136,7 @@ async function main() {
   });
 
   let resolved = 0, unmatched = [];
-  for (const m of pending) {
+  for (const m of due) {
     // Empareja por equipos (en cualquier orientación).
     const ev = espnEvents.find((e) => {
       const names = e.competitors.map((c) => c.team.displayName);
