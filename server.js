@@ -141,6 +141,11 @@ const Q = {
 const PTS_EXACT = 3;
 const PTS_OUTCOME = 1;
 
+// La quiniela se divide en 2 rondas. Ronda 1: hasta el 21 jun (incl. Nueva
+// Zelanda vs Egipto). Ronda 2: del 22 jun en adelante (desde Argentina vs
+// Austria). Cada ronda cuenta SOLO sus partidos (los puntos reinician).
+const ROUND_BOUNDARY = Date.parse('2026-06-22T00:00:00-04:00');
+
 function outcomeFromScore(h, a) {
   return h > a ? 'home' : h < a ? 'away' : 'draw';
 }
@@ -172,28 +177,47 @@ function buildState(token) {
     predsByMatch.get(pr.match_id).push(pr);
   }
 
-  // Tabla general. Puntos: marcador exacto = 3, solo el resultado (1X2) = 1.
+  // Tabla por rondas. Puntos: marcador exacto = 3, solo el resultado (1X2) = 1.
   const matchById = new Map(matches.map((m) => [m.id, m]));
-  const tally = new Map();
-  for (const p of players) tally.set(p.id, { id: p.id, name: p.name, emoji: p.emoji, puntos: 0, exactos: 0, aciertos: 0, jugados: 0, total: 0 });
+  const roundOf = (m) => (Date.parse(m.kickoff) < ROUND_BOUNDARY ? 1 : 2);
+  const mkTally = () => {
+    const t = new Map();
+    for (const p of players) t.set(p.id, { id: p.id, name: p.name, emoji: p.emoji, puntos: 0, exactos: 0, aciertos: 0, jugados: 0, total: 0 });
+    return t;
+  };
+  const tAll = mkTally(), t1 = mkTally(), t2 = mkTally();
   for (const pr of preds) {
-    const t = tally.get(pr.player_id);
-    if (!t) continue;
-    t.total += 1;
     const m = matchById.get(pr.match_id);
-    if (m && m.result && m.home_score != null && m.away_score != null) {
-      t.jugados += 1;
-      if (pr.home_goals === m.home_score && pr.away_goals === m.away_score) {
-        t.puntos += PTS_EXACT; t.exactos += 1; t.aciertos += 1;
-      } else if (pr.pick === m.result) {
-        t.puntos += PTS_OUTCOME; t.aciertos += 1;
+    if (!m) continue;
+    const graded = m.result && m.home_score != null && m.away_score != null;
+    for (const T of [tAll, roundOf(m) === 1 ? t1 : t2]) {
+      const t = T.get(pr.player_id);
+      if (!t) continue;
+      t.total += 1;
+      if (graded) {
+        t.jugados += 1;
+        if (pr.home_goals === m.home_score && pr.away_goals === m.away_score) { t.puntos += PTS_EXACT; t.exactos += 1; t.aciertos += 1; }
+        else if (pr.pick === m.result) { t.puntos += PTS_OUTCOME; t.aciertos += 1; }
       }
     }
   }
-  const standings = [...tally.values()].sort(
-    (a, b) => b.puntos - a.puntos || b.exactos - a.exactos || b.jugados - a.jugados || a.name.localeCompare(b.name, 'es')
-  );
-  standings.forEach((s, i) => { s.rank = i + 1; });
+  const sortStandings = (T) => {
+    const s = [...T.values()].sort((a, b) => b.puntos - a.puntos || b.exactos - a.exactos || b.jugados - a.jugados || a.name.localeCompare(b.name, 'es'));
+    s.forEach((x, i) => { x.rank = i + 1; });
+    return s;
+  };
+  const standings = sortStandings(tAll);
+  // ¿Cuántos partidos hay/jugados por ronda? (para saber si una ronda terminó)
+  const roundMeta = { 1: { total: 0, played: 0 }, 2: { total: 0, played: 0 } };
+  for (const m of matches) {
+    const rm = roundMeta[roundOf(m)];
+    rm.total += 1;
+    if (m.result && m.home_score != null) rm.played += 1;
+  }
+  const rounds = [
+    { key: 2, name: '2ª ronda', range: '22 al 27 jun', finished: roundMeta[2].total > 0 && roundMeta[2].played === roundMeta[2].total, standings: sortStandings(t2) },
+    { key: 1, name: '1ª ronda', range: '17 al 21 jun', finished: roundMeta[1].total > 0 && roundMeta[1].played === roundMeta[1].total, standings: sortStandings(t1) },
+  ];
 
   // Vista de partidos.
   const sorted = matches.slice().sort(
@@ -207,6 +231,7 @@ function buildState(token) {
       home: m.home, away: m.away,
       home_emoji: m.home_emoji, away_emoji: m.away_emoji,
       grp: m.grp, kickoff: m.kickoff, venue: m.venue,
+      round: roundOf(m),
       result: m.result || null,
       home_score: m.home_score == null ? null : m.home_score,
       away_score: m.away_score == null ? null : m.away_score,
@@ -265,6 +290,7 @@ function buildState(token) {
     title: getMeta('title'),
     matches: matchViews,
     standings,
+    rounds,
     players_count: players.length,
     me,
   };

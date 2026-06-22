@@ -17,6 +17,7 @@ let ADMIN_PIN = localStorage.getItem(LS_ADMIN) || null;
 let currentTab = ['tabla', 'yo'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'partidos';
 let matchFilter = 'proximos';   // partidos (jugador): proximos | jugados | todos
 let adminFilter = 'proximos';   // partidos (admin)
+let roundFilter = 2;            // tabla: 2 (default) o 1
 let pollTimer = null;
 let animateOnce = true;
 
@@ -315,13 +316,22 @@ function countUp(elm, to) {
   requestAnimationFrame(f);
 }
 function renderStandings(animate) {
-  const s = STATE.standings;
-  let html = `<div class="eyebrow">🏆 Tabla general</div>`;
+  const rounds = STATE.rounds || [];
+  const sel = rounds.find((r) => r.key === roundFilter) || rounds[0];
+  let html = `<div class="eyebrow">🏆 Tabla · ${esc(sel ? sel.name : 'general')}</div>`;
+  html += `<div class="filterbar">` + rounds.map((r) =>
+    `<button class="fbtn ${r.key === roundFilter ? 'on' : ''}" data-round="${r.key}">${r.key === 2 ? '🏆 ' : ''}${esc(r.name)}</button>`).join('') + `</div>`;
+  const s = sel ? sel.standings : [];
   if (!s.length) {
-    VIEW.innerHTML = html + `<div class="empty"><div class="big">🏆</div><p>Aún no hay jugadores.<br>Crea el tuyo en la pestaña “Yo”.</p></div>`;
+    VIEW.innerHTML = html + `<div class="empty"><div class="big">🏆</div><p>Aún no hay puntos en esta ronda.<br>${STATE.me ? 'Empieza a pronosticar.' : 'Crea tu jugador en la pestaña “Yo”.'}</p></div>`;
     return;
   }
   const meId = STATE.me ? STATE.me.id : null;
+  const top = s[0];
+  html += `<div class="winner-callout ${sel.finished ? 'won' : ''}">
+    <div class="wc-label">${sel.finished ? `🏆 Ganó la ${esc(sel.name)}` : `⭐ Va ganando · ${esc(sel.range)}`}</div>
+    <div class="wc-who"><span class="wc-av">${esc(top.emoji)}</span><span class="wc-nm">${esc(top.name)}</span><span class="wc-pts num">${top.puntos} pts</span></div>
+  </div>`;
   html += `<div class="board"><div class="trow head"><div>#</div><div>Jugador</div><div class="scorecol">Pts</div></div>`;
   for (const p of s) {
     const medal = p.rank === 1 ? '🥇' : p.rank === 2 ? '🥈' : p.rank === 3 ? '🥉' : '';
@@ -401,6 +411,8 @@ VIEW.addEventListener('click', (e) => {
   if (rev) { showPicks(Number(rev.dataset.reveal)); return; }
   const fb = e.target.closest('[data-filter]');
   if (fb) { matchFilter = fb.dataset.filter; animateOnce = true; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  const rb = e.target.closest('[data-round]');
+  if (rb) { roundFilter = Number(rb.dataset.round); animateOnce = true; render(); return; }
   const act = e.target.closest('[data-act]');
   if (act) { const a = act.dataset.act; if (a === 'register') openRegister(); else if (a === 'restore') openRestore(); else if (a === 'showcode') showCode(); }
 });
