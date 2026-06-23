@@ -277,6 +277,7 @@ function buildState(token) {
     for (const pp of list) if (Math.abs(Number(pp.value) - actual) === best) winners.add(pp.player_id);
     closestWinners.set(kk, winners);
   }
+  const propWinnersByMatch = new Map(); // matchId -> { propKey: [{name, emoji, value}] }
   for (const pp of propPreds) {
     const m = matchById.get(pp.match_id);
     if (!m) continue;
@@ -292,6 +293,10 @@ function buildState(token) {
         const t = T.get(pp.player_id);
         if (t) { t.puntos += 1; t.extras += 1; }
       }
+      const pl = playerById.get(pp.player_id);
+      if (!propWinnersByMatch.has(pp.match_id)) propWinnersByMatch.set(pp.match_id, {});
+      const byKey = propWinnersByMatch.get(pp.match_id);
+      (byKey[pp.prop_key] || (byKey[pp.prop_key] = [])).push({ name: pl ? pl.name : '?', emoji: pl ? pl.emoji : '🙂', value: pp.value });
     }
   }
   const sortStandings = (T) => {
@@ -328,6 +333,7 @@ function buildState(token) {
       has_props: hasProps(m),
       corner_line: m.corner_line == null ? 9.5 : m.corner_line,
       props_result: resByMatch.get(m.id) || null,
+      prop_winners: propWinnersByMatch.get(m.id) || null,
       result: m.result || null,
       home_score: m.home_score == null ? null : m.home_score,
       away_score: m.away_score == null ? null : m.away_score,

@@ -214,19 +214,29 @@ function propsResultBlock(m) {
   const r = m.props_result; if (!r) return '';
   const me = STATE.me;
   const myp = me && me.props ? me.props[m.id] : null;
+  const win = m.prop_winners || {};
   const teamName = (v) => v === 'home' ? m.home : v === 'away' ? m.away : 'Nadie';
   const yn = (v) => v === 'si' ? 'Sí' : 'No';
   const rows = [];
-  const add = (q, actualTxt, hit) => rows.push(`<div class="pr-row ${myp ? (hit ? 'hit' : 'miss') : ''}"><span class="pr-q">${esc(q)}</span><span class="pr-val">${esc(actualTxt)}${myp ? (hit ? ' ✓' : ' ✗') : ''}</span></div>`);
-  if (r.first_goal != null) add('Primer gol', teamName(r.first_goal), myp && myp.first_goal === r.first_goal);
-  if (r.odd_even != null) add('Goles par/impar', r.odd_even === 'par' ? 'Par' : 'Impar', myp && myp.odd_even === r.odd_even);
-  if (r.first_half_goal != null) add('Gol 1er tiempo', yn(r.first_half_goal), myp && myp.first_half_goal === r.first_half_goal);
-  const numRow = (q, actual, mine) => rows.push(`<div class="pr-row"><span class="pr-q">${esc(q)}${mine != null ? ` (tú: ${esc(mine)})` : ''}</span><span class="pr-val">${actual}</span></div>`);
-  if (r.offsides != null) numRow('Offsides', r.offsides, myp ? myp.offsides : null);
-  if (r.corners_total != null) numRow('Córners', r.corners_total, myp ? myp.corners : null);
-  if (r.fouls_total != null) numRow('Faltas', r.fouls_total, myp ? myp.fouls : null);
-  if (r.first_card != null) add('1ª tarjeta', teamName(r.first_card), myp && myp.first_card === r.first_card);
-  if (r.red_card != null) add('Tarjeta roja', yn(r.red_card), myp && myp.red_card === r.red_card);
+  const row = (key, q, actualTxt, isNum) => {
+    const winners = win[key] || [];
+    const iWon = !!(me && winners.some((w) => w.name === me.name));
+    const mark = myp ? (iWon ? ' ✓' : ' ✗') : '';
+    const mine = (myp && isNum && myp[key] != null) ? ` <span class="muted">(tú: ${esc(myp[key])})</span>` : '';
+    let winTxt = '';
+    if (myp && !iWon && winners.length) {
+      winTxt = `<div class="pr-win">🏆 ${winners.map((w) => `${esc(w.emoji)} ${esc(w.name)}${isNum ? ` (${esc(w.value)})` : ''}`).join(' · ')}</div>`;
+    }
+    rows.push(`<div class="pr-row ${myp ? (iWon ? 'hit' : 'miss') : ''}"><span class="pr-q">${esc(q)}${mine}</span><span class="pr-val">${esc(actualTxt)}${mark}</span></div>${winTxt}`);
+  };
+  if (r.first_goal != null) row('first_goal', 'Primer gol', teamName(r.first_goal), false);
+  if (r.odd_even != null) row('odd_even', 'Goles par/impar', r.odd_even === 'par' ? 'Par' : 'Impar', false);
+  if (r.first_half_goal != null) row('first_half_goal', 'Gol 1er tiempo', yn(r.first_half_goal), false);
+  if (r.offsides != null) row('offsides', 'Offsides', r.offsides, true);
+  if (r.corners_total != null) row('corners', 'Córners', r.corners_total, true);
+  if (r.fouls_total != null) row('fouls', 'Faltas', r.fouls_total, true);
+  if (r.first_card != null) row('first_card', '1ª tarjeta', teamName(r.first_card), false);
+  if (r.red_card != null) row('red_card', 'Tarjeta roja', yn(r.red_card), false);
   if (!rows.length) return '';
   return `<details class="reveal" style="margin-top:9px"><summary>⭐ Resultado de los extras</summary><div class="prop-res">${rows.join('')}</div></details>`;
 }

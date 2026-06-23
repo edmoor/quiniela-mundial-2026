@@ -204,6 +204,7 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 .prop-res .pr-val { font-weight: 700; color: var(--txt); }
 .prop-res .pr-row.hit .pr-val { color: var(--emerald); }
 .prop-res .pr-row.miss .pr-val { color: var(--faint); }
+.prop-res .pr-win { font-size: 11px; color: var(--gold); margin: 1px 0 5px; padding-left: 2px; line-height: 1.35; }
 
 /* Estado: ya pronosticado / cerrado */
 .m-foot { margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
