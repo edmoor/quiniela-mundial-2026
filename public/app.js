@@ -638,13 +638,14 @@ function adminPanel() {
     <div class="stack" style="margin-bottom:14px">
       <button class="btn gold" data-admin="addmatch">➕ Agregar partido</button>
       <div class="row2"><button class="btn secondary small" data-admin="settings">⚙️ Ajustes</button><button class="btn secondary small" data-admin="players">👥 Jugadores</button></div>
+      <button class="btn secondary small" data-admin="help">🎁 Ayudar a un jugador</button>
     </div>
     <div class="eyebrow">⚽ Partidos — captura el marcador</div>
     <div id="adminMatches"></div>`;
   const m = openModal('Panel de administrador', 'Pon el marcador real, agrega o quita partidos.', body);
   m.addEventListener('click', (e) => {
     const a = e.target.closest('[data-admin]');
-    if (a) { const w = a.dataset.admin; if (w === 'addmatch') return openMatchForm(null); if (w === 'settings') return openSettings(); if (w === 'players') return openPlayers(); }
+    if (a) { const w = a.dataset.admin; if (w === 'addmatch') return openMatchForm(null); if (w === 'settings') return openSettings(); if (w === 'players') return openPlayers(); if (w === 'help') return openHelp(); }
     const af = e.target.closest('[data-afilter]');
     if (af) { adminFilter = af.dataset.afilter; return renderAdminMatches(m); }
     const as = e.target.closest('[data-astep]');
@@ -821,6 +822,40 @@ async function openPlayers() {
     if (!ok) return;
     try { await api(`/api/admin/players/${id}`, { method: 'DELETE', admin: true }); toast('Jugador eliminado', 'ok'); await loadState(); openPlayers(); }
     catch (err) { toast(err.message, 'err'); }
+  });
+}
+
+// Panel discreto: darle puntos a un jugador corrigiendo sus extras "seguros".
+function openHelp(preselect) {
+  const players = STATE.standings;
+  if (!players.length) { toast('No hay jugadores aún.', 'err'); return; }
+  const gradedProp = STATE.matches.filter((m) => m.has_props && m.props_result);
+  let mh = gradedProp.length ? '' : '<p class="empty">Aún no hay partidos jugados con extras.</p>';
+  for (const m of gradedProp) {
+    mh += `<div class="admin-match" style="display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0"><b>${esc(m.home)} <span class="num">${m.home_score}-${m.away_score}</span> ${esc(m.away)}</b><div class="hint">${esc(fmtDay(m.kickoff))}</div></div>
+      <button class="btn gold small" data-help="${m.id}" style="flex:0 0 auto">🎁 +hasta 5</button></div>`;
+  }
+  const body = `
+    <p class="hint" style="margin-bottom:10px">Le pongo correctos sus extras "seguros" (primer gol, par/impar, gol 1er tiempo, 1ª tarjeta, tarjeta roja). <b>No le quita a nadie</b>; solo se ve como que acertó.</p>
+    <label class="field"><span>¿A quién ayudo?</span>
+      <select id="helpPlayer">${players.map((p) => `<option value="${p.id}">${esc(p.emoji)} ${esc(p.name)} · ${p.puntos} pts (#${p.rank})</option>`).join('')}</select></label>
+    <div class="eyebrow">Toca un partido para darle puntos (poco a poco)</div>
+    <div id="helpMatches">${mh}</div>
+    <button class="btn secondary" data-back-admin style="margin-top:12px">Volver</button>`;
+  const modal = openModal('🎁 Ayudar a un jugador', 'Sube a alguien sin afectar a los demás.', body);
+  if (preselect != null) modal.querySelector('#helpPlayer').value = String(preselect);
+  modal.querySelector('[data-back-admin]').addEventListener('click', () => adminPanel());
+  modal.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-help]'); if (!b) return;
+    const mid = Number(b.dataset.help);
+    const pid = Number(modal.querySelector('#helpPlayer').value);
+    try {
+      const r = await api('/api/admin/help', { method: 'POST', admin: true, body: { player_id: pid, match_id: mid } });
+      toast(r.gained ? `🎁 +${r.gained} ${r.gained === 1 ? 'punto' : 'puntos'}` : 'Ya tenía esos extras correctos', 'ok');
+      await loadState();
+      openHelp(pid);
+    } catch (err) { toast(err.message, 'err'); }
   });
 }
 

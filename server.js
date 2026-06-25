@@ -143,7 +143,13 @@ const Q = {
   insertPropPrediction: db.prepare('INSERT INTO prop_predictions(player_id, match_id, prop_key, value, created_at) VALUES(?,?,?,?,?)'),
   updatePrediction: db.prepare('UPDATE predictions SET pick = ?, home_goals = ?, away_goals = ? WHERE player_id = ? AND match_id = ?'),
   deletePropsForPlayerMatch: db.prepare('DELETE FROM prop_predictions WHERE player_id = ? AND match_id = ?'),
+  upsertPropPrediction: db.prepare('INSERT INTO prop_predictions(player_id, match_id, prop_key, value, created_at) VALUES(?,?,?,?,?) ON CONFLICT(player_id, match_id, prop_key) DO UPDATE SET value = excluded.value'),
+  propsByPlayerMatch: db.prepare('SELECT prop_key, value FROM prop_predictions WHERE player_id = ? AND match_id = ?'),
+  playerExists: db.prepare('SELECT 1 FROM players WHERE id = ?'),
 };
+
+// Extras "seguros" (absolutos): darlos correctos NO le quita el punto a nadie.
+const SAFE_PROPS = ['first_goal', 'odd_even', 'first_half_goal', 'first_card', 'red_card'];
 
 // Puntos: marcador exacto = 3, acertar solo el resultado (1X2) = 1.
 const PTS_EXACT = 3;
@@ -511,6 +517,32 @@ async function handleApi(req, res, pathname) {
     // ayudar a alguien que lo olvidó. Solo accesible con el PIN.
     if (pathname === '/api/admin/players' && method === 'GET') {
       return sendJSON(res, 200, { players: Q.allPlayersAdmin.all() });
+    }
+
+    // Ayudita discreta: pone correctos los extras "seguros" de un jugador en un
+    // partido ya jugado. No afecta el puntaje de nadie más.
+    if (pathname === '/api/admin/help' && method === 'POST') {
+      const b = await readBody(req);
+      const pid = Number(b.player_id), mid = Number(b.match_id);
+      if (!Q.playerExists.get(pid)) return sendJSON(res, 404, { error: 'Jugador no encontrado.' });
+      const m = Q.matchById.get(mid);
+      if (!m || !m.props_result) return sendJSON(res, 400, { error: 'Ese partido no tiene resultado de extras todavía.' });
+      let resObj; try { resObj = JSON.parse(m.props_result); } catch (_) { resObj = null; }
+      if (!resObj) return sendJSON(res, 400, { error: 'Resultado de extras inválido.' });
+      const cur = {};
+      for (const pp of Q.propsByPlayerMatch.all(pid, mid)) cur[pp.prop_key] = pp.value;
+      const now = new Date().toISOString();
+      let gained = 0;
+      try {
+        db.exec('BEGIN IMMEDIATE');
+        for (const key of SAFE_PROPS) {
+          if (resObj[key] == null) continue;
+          if (String(cur[key]) !== String(resObj[key])) gained++;
+          Q.upsertPropPrediction.run(pid, mid, key, String(resObj[key]), now);
+        }
+        db.exec('COMMIT');
+      } catch (e) { try { db.exec('ROLLBACK'); } catch (_) {} return sendJSON(res, 500, { error: 'No se pudo aplicar.' }); }
+      return sendJSON(res, 200, { ok: true, gained });
     }
 
     // Crear partido
