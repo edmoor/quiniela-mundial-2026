@@ -4,3 +4,4 @@ quiniela.db-wal
 quiniela.db-shm
 *.log
 .DS_Store
+rifa-preview.html
