@@ -146,7 +146,42 @@ const Q = {
   upsertPropPrediction: db.prepare('INSERT INTO prop_predictions(player_id, match_id, prop_key, value, created_at) VALUES(?,?,?,?,?) ON CONFLICT(player_id, match_id, prop_key) DO UPDATE SET value = excluded.value'),
   propsByPlayerMatch: db.prepare('SELECT prop_key, value FROM prop_predictions WHERE player_id = ? AND match_id = ?'),
   playerExists: db.prepare('SELECT 1 FROM players WHERE id = ?'),
+  koTeamsByPhase: db.prepare('SELECT team, advanced FROM ko_teams WHERE phase = ? ORDER BY team'),
+  upsertKoTeam: db.prepare('INSERT INTO ko_teams(phase, team, advanced) VALUES(?,?,?) ON CONFLICT(phase, team) DO UPDATE SET advanced = excluded.advanced'),
+  koDrawByPhase: db.prepare('SELECT player_id, team FROM ko_draw WHERE phase = ?'),
+  insertKoDraw: db.prepare('INSERT OR IGNORE INTO ko_draw(phase, player_id, team) VALUES(?,?,?)'),
 };
+
+// Fase final (eliminatorias): 3 fases, cada una su propio ganador.
+// Cada jugador recibe "pick" equipos al azar (mismo número para todos, se
+// pueden repetir entre jugadores). +1 por cada equipo suyo que avanza.
+const KO_PHASES = [
+  { key: 'r32', label: '16vos de final', teams: 32, pick: 6 },
+  { key: 'r16', label: 'Octavos', teams: 16, pick: 3 },
+  { key: 'qf', label: 'Cuartos', teams: 8, pick: 2 },
+];
+const KO_BY_KEY = new Map(KO_PHASES.map((p) => [p.key, p]));
+
+// Sorteo automático de una fase (una sola vez, cuando ya están todos los equipos).
+function maybeDrawPhase(phaseKey) {
+  const phase = KO_BY_KEY.get(phaseKey);
+  if (!phase) return;
+  if (getMeta('ko_drawn_' + phaseKey) === '1') return;
+  const teams = Q.koTeamsByPhase.all(phaseKey).map((t) => t.team);
+  if (teams.length < phase.teams) return; // aún faltan equipos
+  const players = db.prepare('SELECT id FROM players').all();
+  if (!players.length) return;
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    for (const p of players) {
+      const sh = teams.slice();
+      for (let i = sh.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = sh[i]; sh[i] = sh[j]; sh[j] = t; }
+      for (const team of sh.slice(0, phase.pick)) Q.insertKoDraw.run(phaseKey, p.id, team);
+    }
+    setMeta('ko_drawn_' + phaseKey, '1');
+    db.exec('COMMIT');
+  } catch (e) { try { db.exec('ROLLBACK'); } catch (_) {} }
+}
 
 // Extras "seguros" (absolutos): darlos correctos NO le quita el punto a nadie.
 const SAFE_PROPS = ['first_goal', 'odd_even', 'first_half_goal', 'first_card', 'red_card'];
@@ -395,6 +430,38 @@ function buildState(token) {
     }
   }
 
+  // Fase final (eliminatorias). El sorteo solo se REVELA pasada su hora.
+  const knockout = { phases: [] };
+  for (const phase of KO_PHASES) {
+    const teamRows = Q.koTeamsByPhase.all(phase.key);
+    if (!teamRows.length) continue;
+    const reveal_at = getMeta('ko_reveal_' + phase.key);
+    const revealed = reveal_at ? nowMs >= Date.parse(reveal_at) : false;
+    const drawn = getMeta('ko_drawn_' + phase.key) === '1';
+    const ph = { key: phase.key, label: phase.label, pick: phase.pick, reveal_at: reveal_at || null, revealed, drawn, teams_count: teamRows.length };
+    if (revealed && drawn) {
+      const advByTeam = new Map(teamRows.map((t) => [t.team, t.advanced]));
+      const byPlayer = new Map();
+      for (const d of Q.koDrawByPhase.all(phase.key)) {
+        if (!byPlayer.has(d.player_id)) byPlayer.set(d.player_id, []);
+        byPlayer.get(d.player_id).push({ team: d.team, advanced: advByTeam.has(d.team) ? advByTeam.get(d.team) : null });
+      }
+      const standings = [], assignments = [];
+      for (const p of players) {
+        const ts = byPlayer.get(p.id) || [];
+        standings.push({ id: p.id, name: p.name, emoji: p.emoji, puntos: ts.filter((t) => t.advanced === 1).length, total: ts.length });
+        assignments.push({ id: p.id, name: p.name, emoji: p.emoji, teams: ts });
+      }
+      standings.sort((a, b) => b.puntos - a.puntos || a.name.localeCompare(b.name, 'es'));
+      standings.forEach((s, i) => { s.rank = i + 1; });
+      ph.standings = standings;
+      ph.assignments = assignments;
+      ph.decided = teamRows.every((t) => t.advanced != null);
+      if (me) ph.my_teams = byPlayer.get(me.id) || [];
+    }
+    knockout.phases.push(ph);
+  }
+
   return {
     now: new Date(nowMs).toISOString(),
     title: getMeta('title'),
@@ -402,6 +469,7 @@ function buildState(token) {
     standings,
     rounds,
     prop_defs: PROPS,
+    knockout,
     players_count: players.length,
     me,
   };
@@ -543,6 +611,24 @@ async function handleApi(req, res, pathname) {
         db.exec('COMMIT');
       } catch (e) { try { db.exec('ROLLBACK'); } catch (_) {} return sendJSON(res, 500, { error: 'No se pudo aplicar.' }); }
       return sendJSON(res, 200, { ok: true, gained });
+    }
+
+    // Datos de eliminatorias desde el actualizador (equipos + quién avanzó).
+    if (pathname === '/api/admin/ko' && method === 'POST') {
+      const b = await readBody(req);
+      const phaseKey = String(b.phase || '');
+      if (!KO_BY_KEY.has(phaseKey)) return sendJSON(res, 400, { error: 'Fase no válida.' });
+      const teams = Array.isArray(b.teams) ? b.teams : [];
+      for (const t of teams) {
+        if (!t || !t.team) continue;
+        const adv = t.advanced == null ? null : (t.advanced ? 1 : 0);
+        Q.upsertKoTeam.run(phaseKey, String(t.team), adv);
+      }
+      if (b.first_kickoff && !isNaN(Date.parse(b.first_kickoff))) {
+        setMeta('ko_reveal_' + phaseKey, new Date(Date.parse(b.first_kickoff) - 60 * 60 * 1000).toISOString());
+      }
+      maybeDrawPhase(phaseKey);
+      return sendJSON(res, 200, { ok: true });
     }
 
     // Crear partido

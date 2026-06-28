@@ -73,6 +73,22 @@ db.exec(`
     key   TEXT PRIMARY KEY,
     value TEXT
   );
+
+  -- Fase final (eliminatorias). Equipos por fase y si avanzaron.
+  CREATE TABLE IF NOT EXISTS ko_teams (
+    phase    TEXT NOT NULL,
+    team     TEXT NOT NULL,
+    advanced INTEGER,                 -- 1 avanzó, 0 eliminado, NULL sin decidir
+    PRIMARY KEY (phase, team)
+  );
+  -- Sorteo: equipos que le tocaron a cada jugador por fase.
+  CREATE TABLE IF NOT EXISTS ko_draw (
+    phase     TEXT NOT NULL,
+    player_id INTEGER NOT NULL,
+    team      TEXT NOT NULL,
+    PRIMARY KEY (phase, player_id, team),
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+  );
 `);
 
 // --- Migraciones (agregar columnas nuevas a bases ya existentes) ----------

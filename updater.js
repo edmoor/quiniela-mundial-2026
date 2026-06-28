@@ -47,6 +47,14 @@ function nameMatches(esName, espnName) {
   return enKeys(esName).has(norm(espnName));
 }
 
+// Inglés(ESPN) -> Español, y set de equipos "reales" (para detectar TBD).
+const EN2ES = {};
+const VALID_TEAMS = new Set();
+for (const [es, aliases] of Object.entries(ES2EN)) for (const a of aliases) { EN2ES[norm(a)] = es; VALID_TEAMS.add(norm(a)); }
+function toES(en) { return EN2ES[norm(en)] || en; }
+function isRealTeam(en) { return VALID_TEAMS.has(norm(en)); }
+const SLUG2PHASE = { 'round-of-32': 'r32', 'round-of-16': 'r16', 'quarterfinals': 'qf' };
+
 async function getJSON(url, opts) {
   const r = await fetch(url, opts);
   if (!r.ok) throw new Error(`HTTP ${r.status} ${url}`);
@@ -112,25 +120,54 @@ function resolveFromSummary(match, summary) {
   return { home_score, away_score, props };
 }
 
+// Fase final: trae los equipos de cada fase (16vos/8vos/cuartos) y quién avanzó.
+async function resolveKnockout(adminHeaders) {
+  const sb = await getJSON(`${ESPN}/scoreboard?dates=20260628-20260720&limit=200`);
+  const byPhase = {};
+  for (const e of (sb.events || [])) {
+    const slug = e.season && e.season.slug;
+    const phase = SLUG2PHASE[slug];
+    if (phase) (byPhase[phase] || (byPhase[phase] = [])).push(e);
+  }
+  for (const phaseKey of Object.keys(byPhase)) {
+    const evs = byPhase[phaseKey].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+    const allReal = evs.every((e) => e.competitions[0].competitors.every((x) => isRealTeam(x.team.displayName)));
+    if (!allReal) continue; // aún hay equipos por definir (TBD)
+    const teams = [];
+    for (const e of evs) {
+      const finished = e.status.type.completed === true;
+      for (const c of e.competitions[0].competitors) {
+        teams.push({ team: toES(c.team.displayName), advanced: finished ? (c.winner === true ? 1 : 0) : null });
+      }
+    }
+    try {
+      await fetch(`${BASE}/api/admin/ko`, { method: 'POST', headers: adminHeaders, body: JSON.stringify({ phase: phaseKey, first_kickoff: evs[0].date, teams }) });
+      const done = evs.filter((e) => e.status.type.completed).length;
+      log(`  KO ${phaseKey}: ${teams.length} equipos (${done}/${evs.length} jugados)`);
+    } catch (e) { log('  KO error', phaseKey, e.message); }
+  }
+}
+
 async function main() {
   const adminHeaders = { 'Content-Type': 'application/json', 'x-admin-pin': PIN };
-
-  // 1) Nuestro estado (partidos a resolver).
   const state = await getJSON(`${BASE}/api/state`);
   const now = Date.now();
+
+  // 1) Partidos de grupos. Solo tocamos ESPN si hay alguno por cerrar (≥95 min
+  // desde su inicio, sin resolver) — así no machacamos la API.
   const pending = state.matches.filter((m) => !m.result || (m.has_props && !m.props_result));
-  // SOLO tocamos ESPN si hay partidos que YA deberían haber terminado (≥95 min
-  // desde su inicio) y siguen sin resolver. Si no hay ninguno, ni llamamos a
-  // ESPN — así no la machacamos y no hay riesgo de ban.
   const GRACE = 95 * 60 * 1000;
   const due = pending.filter((m) => Date.parse(m.kickoff) + GRACE <= now);
-  if (!due.length) {
-    log(`Sin partidos por cerrar ahora (pendientes futuros: ${pending.length}). No se llama a ESPN.`);
-    return;
-  }
-  log(`Partidos por cerrar: ${due.length}`);
+  if (due.length) await resolveGroups(due, adminHeaders);
+  else log(`Sin partidos de grupos por cerrar (pendientes: ${pending.length}).`);
 
-  // 2) Calendario de ESPN (1 sola llamada, todo el rango del torneo).
+  // 2) Eliminatorias (a partir del 27 jun): equipos por fase + quién avanza.
+  if (now >= Date.parse('2026-06-27T00:00:00-04:00')) {
+    try { await resolveKnockout(adminHeaders); } catch (e) { log('KO error', e.message); }
+  }
+}
+
+async function resolveGroups(due, adminHeaders) {
   const sb = await getJSON(`${ESPN}/scoreboard?dates=${SCOREBOARD_RANGE}&limit=400`);
   const espnEvents = (sb.events || []).map((e) => {
     const c = e.competitions[0].competitors;

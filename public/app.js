@@ -14,7 +14,9 @@ const LS_ADMIN = 'quiniela_admin_pin';
 let STATE = null;
 let TOKEN = localStorage.getItem(LS_TOKEN) || null;
 let ADMIN_PIN = localStorage.getItem(LS_ADMIN) || null;
-let currentTab = ['tabla', 'yo'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'partidos';
+let currentTab = ['tabla', 'final', 'yo'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'partidos';
+let koTimer = null;             // cuenta regresiva del sorteo
+let koPhase = null;             // fase seleccionada en "Final"
 let matchFilter = 'proximos';   // partidos (jugador): proximos | jugados | todos
 let adminFilter = 'proximos';   // partidos (admin)
 let roundFilter = 2;            // tabla: 2 (default) o 1
@@ -84,8 +86,10 @@ async function loadState() {
 function render() {
   const animate = animateOnce; animateOnce = false;
   if (!STATE) { VIEW.innerHTML = '<p class="empty">Cargando…</p>'; return; }
+  clearInterval(koTimer); koTimer = null;
   if (currentTab === 'partidos') renderMatches(animate);
   else if (currentTab === 'tabla') renderStandings(animate);
+  else if (currentTab === 'final') renderKnockout(animate);
   else if (currentTab === 'yo') renderMe(animate);
   document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('is-active', b.dataset.tab === currentTab));
   moveIndicator();
@@ -503,6 +507,166 @@ function renderMe(animate) {
 /* ===========================================================================
    EVENTOS (vista principal)
    =========================================================================== */
+/* ---------- FASE FINAL (eliminatorias) ---------- */
+// Banderas por nombre (en español, igual que los guarda el actualizador).
+// Sirve de respaldo para equipos de eliminatorias que quizá no estén en la
+// lista de partidos sembrados; los emoji de los partidos tienen prioridad.
+const FLAGS = {
+  'Portugal': '🇵🇹', 'RD Congo': '🇨🇩', 'Uzbekistán': '🇺🇿', 'Colombia': '🇨🇴', 'Inglaterra': '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+  'Croacia': '🇭🇷', 'Ghana': '🇬🇭', 'Panamá': '🇵🇦', 'Chequia': '🇨🇿', 'Sudáfrica': '🇿🇦', 'México': '🇲🇽',
+  'Corea del Sur': '🇰🇷', 'Suiza': '🇨🇭', 'Bosnia y Herzegovina': '🇧🇦', 'Canadá': '🇨🇦', 'Catar': '🇶🇦',
+  'Escocia': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'Marruecos': '🇲🇦', 'Brasil': '🇧🇷', 'Haití': '🇭🇹', 'Estados Unidos': '🇺🇸',
+  'Australia': '🇦🇺', 'Turquía': '🇹🇷', 'Paraguay': '🇵🇾', 'Alemania': '🇩🇪', 'Costa de Marfil': '🇨🇮',
+  'Ecuador': '🇪🇨', 'Curazao': '🇨🇼', 'Países Bajos': '🇳🇱', 'Suecia': '🇸🇪', 'Túnez': '🇹🇳', 'Japón': '🇯🇵',
+  'Bélgica': '🇧🇪', 'Irán': '🇮🇷', 'Nueva Zelanda': '🇳🇿', 'Egipto': '🇪🇬', 'España': '🇪🇸', 'Arabia Saudita': '🇸🇦',
+  'Uruguay': '🇺🇾', 'Cabo Verde': '🇨🇻', 'Francia': '🇫🇷', 'Irak': '🇮🇶', 'Noruega': '🇳🇴', 'Senegal': '🇸🇳',
+  'Argentina': '🇦🇷', 'Austria': '🇦🇹', 'Jordania': '🇯🇴', 'Argelia': '🇩🇿',
+  'Polonia': '🇵🇱', 'Dinamarca': '🇩🇰', 'Serbia': '🇷🇸', 'Gales': '🏴󠁧󠁢󠁷󠁬󠁳󠁿', 'Camerún': '🇨🇲',
+  'Nigeria': '🇳🇬', 'Italia': '🇮🇹', 'Perú': '🇵🇪', 'Chile': '🇨🇱', 'Costa Rica': '🇨🇷', 'Honduras': '🇭🇳',
+};
+function teamEmojiMap() {
+  const m = { ...FLAGS };
+  for (const x of STATE.matches) { if (x.home_emoji) m[x.home] = x.home_emoji; if (x.away_emoji) m[x.away] = x.away_emoji; }
+  return m;
+}
+function koTeamChip(t, EM) {
+  const cls = t.advanced === 1 ? 'adv' : t.advanced === 0 ? 'out' : '';
+  const mark = t.advanced === 1 ? ' ✓' : t.advanced === 0 ? ' ✗' : '';
+  return `<span class="ko-team ${cls}"><span class="kf">${esc(EM[t.team] || '⚽')}</span>${esc(t.team)}${mark}</span>`;
+}
+function revealWhen(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' }) + ' a las ' + d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+}
+function startKoCountdown(iso) {
+  const el = document.getElementById('koCount'); if (!el || !iso) return;
+  const target = Date.parse(iso);
+  const tick = () => {
+    const diff = target - Date.now();
+    if (diff <= 0) { el.innerHTML = '<b style="color:var(--gold)">¡Ya casi! Recarga la página 🔄</b>'; clearInterval(koTimer); return; }
+    const s = Math.floor(diff / 1000), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+    const cell = (n, l) => `<span class="ku"><b>${n}</b>${l}</span>`;
+    el.innerHTML = (d > 0 ? cell(d, 'd') : '') + cell(h, 'h') + cell(m, 'm') + cell(ss, 's');
+  };
+  tick(); koTimer = setInterval(tick, 1000);
+}
+
+function renderKnockout(animate) {
+  const ko = STATE.knockout || { phases: [] };
+  if (!ko.phases.length) {
+    VIEW.innerHTML = `<div class="eyebrow">🎲 Fase final</div><div class="empty"><div class="big">🎲</div><p>La fase final empieza pronto.<br>Aquí se sortearán equipos al azar para cada quien, y ganas según cuántos avancen.</p></div>`;
+    return;
+  }
+  if (!koPhase || !ko.phases.find((p) => p.key === koPhase)) {
+    const rev = ko.phases.filter((p) => p.revealed);
+    koPhase = (rev.length ? rev[rev.length - 1] : ko.phases[ko.phases.length - 1]).key;
+  }
+  const ph = ko.phases.find((p) => p.key === koPhase);
+  const EM = teamEmojiMap();
+  let html = `<div class="eyebrow">🎲 Fase final · ${esc(ph.label)}</div>`;
+  if (ko.phases.length > 1) {
+    html += `<div class="filterbar">` + ko.phases.map((p) => `<button class="fbtn ${p.key === koPhase ? 'on' : ''}" data-kophase="${p.key}">${esc(p.label)}</button>`).join('') + `</div>`;
+  }
+
+  if (!ph.revealed) {
+    html += `<div class="card center" style="padding:26px 16px">
+      <div style="font-size:50px">🎰</div>
+      <h2 style="margin:10px 0 4px">Sorteo de ${esc(ph.label)}</h2>
+      <p class="muted" style="margin-bottom:16px">Se revela el ${ph.reveal_at ? esc(revealWhen(ph.reveal_at)) : 'pronto'}</p>
+      <div class="ko-count" id="koCount"></div>
+      <p class="hint" style="margin-top:18px">A esa hora aparecerá el botón para ver los equipos que te tocaron al azar. ¡Mientras más avancen, más puntos! 🎲</p>
+    </div>`;
+    VIEW.innerHTML = html;
+    startKoCountdown(ph.reveal_at);
+    return;
+  }
+
+  if (!ph.standings) {
+    html += `<div class="card center" style="padding:26px 16px"><div style="font-size:50px">🎰</div><h2 style="margin:10px 0 4px">Preparando el sorteo…</h2><p class="muted">Recarga en un momento para ver los equipos. 🔄</p></div>`;
+    VIEW.innerHTML = html;
+    return;
+  }
+
+  const opened = !STATE.me || localStorage.getItem('ko_open_' + ph.key) === '1';
+  if (STATE.me && !opened && ph.my_teams) {
+    html += `<div class="card center" style="padding:30px 16px">
+      <div style="font-size:54px">🎁</div>
+      <h2 style="margin:10px 0 6px">¡Ya hay sorteo!</h2>
+      <p class="muted" style="margin-bottom:20px">Te tocaron <b>${ph.my_teams.length} equipos</b> para ${esc(ph.label)}. ¿Listo para ver cuáles?</p>
+      <button class="btn gold" data-koreveal="${ph.key}">🎰 Mira lo que te tocó</button>
+    </div>`;
+    VIEW.innerHTML = html;
+    return;
+  }
+
+  if (STATE.me && ph.my_teams) {
+    const adv = ph.my_teams.filter((t) => t.advanced === 1).length;
+    html += `<div class="card" style="margin-bottom:14px"><div class="props-title" style="margin-bottom:10px">⭐ Tus equipos · ${esc(ph.label)}</div>
+      <div class="ko-teams">${ph.my_teams.map((t) => koTeamChip(t, EM)).join('')}</div>
+      <div class="hint center" style="margin-top:11px">${adv} ${adv === 1 ? 'equipo avanzó' : 'equipos avanzaron'} · <b style="color:var(--emerald)">+${adv} pts</b></div></div>`;
+  }
+  const meId = STATE.me ? STATE.me.id : null;
+  html += `<div class="board"><div class="trow head"><div>#</div><div>Jugador</div><div class="scorecol">Pts</div></div>`;
+  for (const s of ph.standings) {
+    const medal = s.rank === 1 ? '🥇' : s.rank === 2 ? '🥈' : s.rank === 3 ? '🥉' : '';
+    html += `<div class="trow ${s.id === meId ? 'me' : ''} ${s.rank <= 3 ? 'top' + s.rank : ''}">
+      <div class="rank">${medal ? `<span class="medal">${medal}</span>` : s.rank}</div>
+      <div class="who"><div class="av">${esc(s.emoji)}</div><div style="min-width:0"><div class="nm">${esc(s.name)}</div><div class="sub">${s.puntos} de ${s.total} avanzaron</div></div></div>
+      <div class="scorecol"><div class="pts num">${s.puntos}</div><div class="ptlabel">pts</div></div></div>`;
+  }
+  html += `</div>`;
+  html += `<details class="reveal" style="margin-top:14px"><summary>Ver los equipos de todos</summary><div style="margin-top:10px;display:flex;flex-direction:column;gap:10px">`;
+  for (const a of ph.assignments) {
+    html += `<div class="admin-match"><div class="am-top"><span>${esc(a.emoji)} ${esc(a.name)}</span><span style="margin-left:auto;color:var(--emerald);font-weight:800">${a.teams.filter((t) => t.advanced === 1).length} pts</span></div><div class="ko-teams">${a.teams.map((t) => koTeamChip(t, EM)).join('')}</div></div>`;
+  }
+  html += `</div></details>`;
+  html += `<p class="hint center" style="margin-top:12px">${ph.decided ? '🏁 Fase terminada' : 'Cada equipo tuyo que avanza = +1 punto'}</p>`;
+  VIEW.innerHTML = html;
+  if (animate) staggerIn();
+}
+
+function playKoReveal(phaseKey) {
+  const ph = (STATE.knockout.phases || []).find((p) => p.key === phaseKey);
+  if (!ph || !ph.my_teams) return;
+  const EM = teamEmojiMap();
+  const pool = [], seen = new Set();
+  for (const a of ph.assignments) for (const t of a.teams) if (!seen.has(t.team)) { seen.add(t.team); pool.push(t.team); }
+  const reelHTML = ph.my_teams.map((mt) => {
+    const items = [];
+    for (let k = 0; k < 24; k++) items.push(pool[Math.floor(Math.random() * pool.length)] || mt.team);
+    items.push(mt.team);
+    return `<div class="reel"><div class="reel-strip">${items.map((t) => `<div class="reel-item"><span class="kf">${esc(EM[t] || '⚽')}</span><span>${esc(t)}</span></div>`).join('')}</div></div>`;
+  }).join('');
+  const overlay = el(`<div class="overlay ko-overlay"><div class="ko-modal">
+    <h2 style="text-align:center">🎰 Tu sorteo · ${esc(ph.label)}</h2>
+    <p class="muted center" style="margin:4px 0 16px">¡A ver qué equipos te tocaron!</p>
+    <div class="reels">${reelHTML}</div>
+    <button class="btn ko-done" disabled style="margin-top:18px">Girando…</button></div></div>`);
+  MODAL_ROOT.appendChild(overlay);
+  const ITEM_H = 56;
+  const strips = overlay.querySelectorAll('.reel-strip');
+  let landed = 0;
+  strips.forEach((s, i) => {
+    const n = s.children.length;
+    setTimeout(() => {
+      s.style.transition = `transform ${1.7 + i * 0.18}s cubic-bezier(.13,.7,.1,1)`;
+      s.style.transform = `translateY(-${(n - 1) * ITEM_H}px)`;
+    }, 100 + i * 240);
+    s.addEventListener('transitionend', () => {
+      s.parentElement.classList.add('reel-done');
+      if (++landed === strips.length) {
+        confetti(innerWidth / 2, innerHeight * 0.4);
+        const done = overlay.querySelector('.ko-done');
+        done.disabled = false; done.textContent = '¡Listo! 🎉';
+      }
+    }, { once: true });
+  });
+  overlay.querySelector('.ko-done').addEventListener('click', () => {
+    localStorage.setItem('ko_open_' + phaseKey, '1');
+    closeModal(); render();
+  });
+}
+
 VIEW.addEventListener('click', (e) => {
   const step = e.target.closest('[data-step]');
   if (step) { onStep(Number(step.dataset.step), step.dataset.side, Number(step.dataset.d)); return; }
@@ -522,6 +686,10 @@ VIEW.addEventListener('click', (e) => {
   if (fb) { matchFilter = fb.dataset.filter; animateOnce = true; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
   const rb = e.target.closest('[data-round]');
   if (rb) { roundFilter = Number(rb.dataset.round); animateOnce = true; render(); return; }
+  const kp = e.target.closest('[data-kophase]');
+  if (kp) { koPhase = kp.dataset.kophase; animateOnce = true; render(); return; }
+  const kr = e.target.closest('[data-koreveal]');
+  if (kr) { playKoReveal(kr.dataset.koreveal); return; }
   const act = e.target.closest('[data-act]');
   if (act) { const a = act.dataset.act; if (a === 'register') openRegister(); else if (a === 'restore') openRestore(); else if (a === 'showcode') showCode(); }
 });
@@ -899,7 +1067,7 @@ function fxTick() {
 function moveIndicator() {
   const bar = document.querySelector('.tabbar'), ind = document.querySelector('.tab-ind');
   if (!bar || !ind) return;
-  const w = bar.clientWidth / 3, idx = ['partidos', 'tabla', 'yo'].indexOf(currentTab);
+  const w = bar.clientWidth / 4, idx = ['partidos', 'tabla', 'final', 'yo'].indexOf(currentTab);
   ind.style.transform = `translateX(${idx * w}px)`;
 }
 document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => {
